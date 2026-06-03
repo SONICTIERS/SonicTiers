@@ -297,30 +297,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                   )}
                 </button>
               </form>
-
-              {/* Quick Preset bypass option */}
-              <div className="border-t border-zinc-900 mt-6 pt-5 text-left">
-                <span className="text-[10px] font-mono text-zinc-600 block uppercase mb-3 text-center">
-                  -- OR EVALUATE AS A SERVER LEGEND --
-                </span>
-                
-                <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono font-bold">
-                  <button
-                    id="bypass-swifter"
-                    onClick={() => handleQuickBypassedAuth('Swifter')}
-                    className="p-2.5 bg-zinc-950/50 border border-zinc-900 rounded-xl text-zinc-300 hover:border-zinc-800 hover:bg-zinc-950 transition-all cursor-pointer"
-                  >
-                    🚀 SWIFTER (HT1)
-                  </button>
-                  <button
-                    id="bypass-dante"
-                    onClick={() => handleQuickBypassedAuth('Dante')}
-                    className="p-2.5 bg-zinc-950/50 border border-zinc-900 rounded-xl text-zinc-300 hover:border-zinc-800 hover:bg-zinc-950 transition-all cursor-pointer"
-                  >
-                    👑 DANTE (HT1)
-                  </button>
-                </div>
-              </div>
             </motion.div>
           ) : (
             <motion.div

@@ -51,7 +51,12 @@ export default function App() {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   
   // Navigation
-  const [activePage, setActivePage] = useState<'landing' | 'leaderboard' | 'test' | 'profile' | 'admin' | 'auth'>('landing');
+  const [activePage, setActivePage] = useState<'landing' | 'leaderboard' | 'test' | 'profile' | 'admin' | 'auth'>(() => {
+    const savedPage = localStorage.getItem('sonictiers_active_page');
+    if (savedPage) return savedPage as any;
+    const localUser = localStorage.getItem('sonictiers_current_user');
+    return localUser ? 'profile' : 'landing';
+  });
   const [selectedPlayerForDossier, setSelectedPlayerForDossier] = useState<MinecraftPlayer | null>(null);
   
   // Active test configurations
@@ -212,6 +217,7 @@ export default function App() {
     setCurrentUser(matched);
     localStorage.setItem('sonictiers_current_user', JSON.stringify(matched));
     setActivePage('profile');
+    localStorage.setItem('sonictiers_active_page', 'profile');
     setSelectedPlayerForDossier(null);
   };
 
@@ -222,6 +228,7 @@ export default function App() {
     setIsSessionAdmin(false);
     localStorage.removeItem('sonictiers_session_admin');
     setActivePage('landing');
+    localStorage.removeItem('sonictiers_active_page');
     setSelectedPlayerForDossier(null);
   };
 
@@ -433,6 +440,7 @@ export default function App() {
   // Nav routing switch helper
   const navigateTo = (page: typeof activePage) => {
     setActivePage(page);
+    localStorage.setItem('sonictiers_active_page', page);
     setSelectedPlayerForDossier(null); // clear sub-profile viewing
     setIsMobileMenuOpen(false);
   };
@@ -775,7 +783,7 @@ export default function App() {
                               Console Bypass Gate
                             </h3>
                             <p className="text-xs font-sans text-zinc-400 text-center leading-relaxed">
-                              Administrative functions are restricted to certified staff. Use passphrase key <b>sonicvault</b> to authenticate.
+                              Administrative functions are restricted to certified staff. Enter passphrase key to authenticate.
                             </p>
                           </div>
 
@@ -828,9 +836,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="text-[9px] font-mono text-zinc-600 text-center uppercase">
-                            HINT: Bypass with passcode <span className="text-zinc-500 font-bold border-b border-zinc-800">sonicvault</span>
-                          </div>
+
                         </div>
                       )}
                     </div>
