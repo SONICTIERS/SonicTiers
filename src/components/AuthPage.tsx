@@ -4,6 +4,7 @@ import { MinecraftPlayer } from '../types';
 import { Shield, Sparkles, User, ArrowRight, Loader2, CheckCircle2, RefreshCw, Upload } from 'lucide-react';
 import { MOCK_PLAYERS } from '../mockData';
 import { motion, AnimatePresence } from 'motion/react';
+import { verifyWithSupabase } from '../utils/supabase';
 
 interface AuthPageProps {
   onLoginSuccess: (username: string, uuid: string, customAvatarUrl?: string, customBodyUrl?: string, isUnoriginal?: boolean) => void;
@@ -18,6 +19,8 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resolvedProfile, setResolvedProfile] = useState<{ username: string; uuid: string; avatarUrl: string; bodyUrl: string } | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const handleSkinFile = (file: File) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -75,6 +78,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const handleMojangLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setVerificationError(null);
     setResolvedProfile(null);
 
     const term = usernameInput.trim();
@@ -83,8 +87,27 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
       return;
     }
 
+    if (!verificationCode.trim()) {
+      setVerificationError('Verification code is required to connect.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    // Verify input username and code with Supabase
+    const dbCheck = await verifyWithSupabase(term, verificationCode);
+    if (!dbCheck.success) {
+      setVerificationError(dbCheck.message || 'Verification database check failed.');
+      setIsLoading(false);
+      return;
+    }
+
+    // Capture simulated state warning if present
+    if (dbCheck.isSimulated) {
+      setVerificationError(dbCheck.message);
+    }
+
     if (isUnoriginal) {
-      setIsLoading(true);
       setTimeout(() => {
         const fallbackSteveAvatar = 'https://mc-heads.net/avatar/dec23297-5654-41d0-8ac1-4f812ecf4e1d/64';
         const fallbackSteveBody = 'https://mc-heads.net/body/dec23297-5654-41d0-8ac1-4f812ecf4e1d/200';
@@ -100,7 +123,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
       return;
     }
 
-    setIsLoading(true);
     try {
       const parsed = await fetchMinecraftProfile(term);
       setResolvedProfile({
@@ -116,8 +138,24 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   };
 
-  const handleCreateAndLog = () => {
+  const handleCreateAndLog = async () => {
     if (!resolvedProfile) return;
+    if (!verificationCode.trim()) {
+      setVerificationError('Verification code is required.');
+      return;
+    }
+    
+    setIsLoading(true);
+    setVerificationError(null);
+    
+    const dbCheck = await verifyWithSupabase(resolvedProfile.username, verificationCode);
+    setIsLoading(false);
+    
+    if (!dbCheck.success) {
+      setVerificationError(dbCheck.message || 'Verification database check failed.');
+      return;
+    }
+
     onLoginSuccess(resolvedProfile.username, resolvedProfile.uuid, resolvedProfile.avatarUrl, resolvedProfile.bodyUrl, isUnoriginal);
   };
 
@@ -190,6 +228,45 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                       className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder-zinc-500 outline-none focus:border-zinc-700 transition-all font-sans"
                     />
                   </div>
+                </div>
+
+                {/* Verification Code Gate within Connect Player Account form */}
+                <div className="space-y-1.5 text-left">
+                  <label htmlFor="auth-verification-control" className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                    Verification Code :
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="auth-verification-control"
+                      type="text"
+                      maxLength={24}
+                      placeholder="e.g. DS9K2M"
+                      value={verificationCode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^a-zA-Z0-9]/g, ''); // alphanumeric only
+                        setVerificationCode(val);
+                        if (val.length >= 4) {
+                          setVerificationError(null);
+                        }
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-3 px-4 text-sm font-mono tracking-[0.25em] text-[#39FF14] placeholder-zinc-800 outline-none focus:border-zinc-700 transition-all font-bold"
+                    />
+                    {verificationCode.length >= 4 && (
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#39FF14] font-bold uppercase">
+                        ✓ OK
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="text-[9px] font-mono text-zinc-550 leading-tight">
+                    Enter the code you got from Discord
+                  </div>
+
+                  {verificationError && (
+                    <div className="text-[10px] text-red-400 font-mono mt-0.5">
+                      ⚠️ {verificationError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-start gap-2.5 py-1 px-1">
@@ -335,10 +412,53 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 </span>
               </div>
 
+              {/* Verification Code Gate */}
+              <div className="space-y-2 text-left max-w-xs mx-auto">
+                <label htmlFor="verification-input" className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                  Enter Verification Code :
+                </label>
+                <div className="relative">
+                  <input
+                    id="verification-input"
+                    type="text"
+                    maxLength={24}
+                    placeholder="e.g. DS9K2M"
+                    value={verificationCode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^a-zA-Z0-9]/g, ''); // alphanumeric only
+                      setVerificationCode(val);
+                      if (val.length >= 4) {
+                        setVerificationError(null);
+                      }
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-90 w-full rounded-xl py-2.5 px-3.5 text-center text-sm font-mono tracking-[0.25em] text-[#39FF14] placeholder-zinc-800 outline-none focus:border-zinc-750 transition-all font-bold"
+                  />
+                  {verificationCode.length >= 4 && (
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#39FF14] font-bold uppercase">
+                      ✓ READY
+                    </span>
+                  )}
+                </div>
+                
+                <div className="text-[9px] font-mono text-zinc-550 leading-tight">
+                  Enter the code you got from Discord
+                </div>
+
+                {verificationError && (
+                  <div className="text-[10px] text-red-400 font-mono mt-0.5">
+                    ⚠️ {verificationError}
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <button
                   id="reset-lookup-btn"
-                  onClick={() => setResolvedProfile(null)}
+                  onClick={() => {
+                    setResolvedProfile(null);
+                    setVerificationCode('');
+                    setVerificationError(null);
+                  }}
                   className="px-4 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-white rounded-xl transition-all cursor-pointer"
                 >
                   <RefreshCw className="w-4 h-4" />
