@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { GameMode, MinecraftPlayer } from '../types';
 import { getMinecraftBodyRender, getCorrectBodyRender } from '../utils/minecraft';
 import { Swords, Trophy, Users, ShieldAlert, Sparkles, ChevronRight, Play } from 'lucide-react';
@@ -16,46 +15,18 @@ export default function LandingPage({ topPlayers, onNavigate, onSelectPlayer }: 
   const sortedPlayers = [...topPlayers].sort((a, b) => b.overallPoints - a.overallPoints);
   const podiumPlayers = sortedPlayers.slice(0, 3);
 
-  // Set up realistic live statistics state
-  const [activeCompetitors, setActiveCompetitors] = useState(() => {
-    const mins = new Date().getUTCMinutes();
-    return 14820 + (mins % 15) * 3 + Math.floor(Math.random() * 5);
-  });
+  // Calculate actual registered players on this website's database
+  const totalCompetitors = topPlayers.length;
 
-  const [testsConducted, setTestsConducted] = useState(() => {
-    const now = new Date();
-    const hours = now.getUTCHours();
-    const minutes = now.getUTCMinutes();
-    const seconds = now.getUTCSeconds();
-    // Base standard of around 85,000 + hourly volume increases + minute progression
-    const base = 85240 + (hours * 1150) + (minutes * 19) + seconds;
-    return Math.floor(base);
-  });
+  // Calculate actual tester accounts in this website's database
+  const totalTesters = topPlayers.filter(p => p.isTester).length;
 
-  // Calculate actual HT1 roster size + baseline verified registered global champions
-  const ht1Count = topPlayers.filter(p => p.overallRank === 'HT1').length;
-  const [eliteHT1Count] = useState(36 + ht1Count);
-
-  useEffect(() => {
-    // Dynamic ticker: Active players register/logout every 10 to 18 seconds
-    const compsInterval = setInterval(() => {
-      setActiveCompetitors(prev => prev + (Math.random() > 0.65 ? 1 : Math.random() > 0.85 ? -1 : 0));
-    }, 12000);
-
-    // Dynamic ticker: Combat tests completed live every 1.8 to 3.5 seconds
-    const testsInterval = setInterval(() => {
-      setTestsConducted(prev => prev + Math.floor(Math.random() * 3) + 1);
-    }, 2400);
-
-    return () => {
-      clearInterval(compsInterval);
-      clearInterval(testsInterval);
-    };
-  }, []);
+  // Calculate actual HT1 roster size in this website's database
+  const eliteHT1Count = topPlayers.filter(p => p.overallRank === 'HT1').length;
 
   const statsHighlights = [
-    { label: "Active Competitors", val: activeCompetitors.toLocaleString(), icon: Users, color: "text-green-400" },
-    { label: "Tests Conducted Today", val: testsConducted.toLocaleString(), icon: Swords, color: "text-[#EF3131]" },
+    { label: "Active Competitors", val: totalCompetitors.toLocaleString(), icon: Users, color: "text-green-400" },
+    { label: "Testers", val: totalTesters.toLocaleString(), icon: Swords, color: "text-[#EF3131]" },
     { label: "Elite HT1 Rankings", val: eliteHT1Count.toLocaleString(), icon: Trophy, color: "text-yellow-400" },
   ];
 

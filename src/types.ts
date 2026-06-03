@@ -79,7 +79,11 @@ export interface MinecraftPlayer {
   stats: Record<GameMode, ModeStat>;
   joinedDate: string;
   isBanned?: boolean;
+  banDurationDays?: number;
+  banStartDate?: string;
+  banExpiresAt?: string;
   isAdmin?: boolean;
+  isTester?: boolean;
   customAvatarUrl?: string;
   customBodyUrl?: string;
   isUnoriginal?: boolean;

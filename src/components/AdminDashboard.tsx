@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MinecraftPlayer, AdminSettings, RankTier } from '../types';
-import { getMinecraftAvatar, fetchMinecraftProfile, processMinecraftSkin } from '../utils/minecraft';
+import { getMinecraftAvatar, fetchMinecraftProfile, processMinecraftSkin, getCorrectAvatar } from '../utils/minecraft';
 import { RANK_TIERS, getRankByPoints, generateModeStats, GAME_MODES } from '../mockData';
 import { ShieldAlert, Users, Trash, ToggleLeft, ToggleRight, Check, Sliders, AlertTriangle, Play, RefreshCw, BarChart, Plus, Edit, X, Upload, Image, Search } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -42,7 +42,7 @@ interface AdminDashboardProps {
   players: MinecraftPlayer[];
   settings: AdminSettings;
   onUpdateSettings: (next: AdminSettings) => void;
-  onModifyBlockStatus: (username: string, nextBanned: boolean) => void;
+  onModifyBlockStatus: (username: string, nextBanned: boolean, days?: number) => void;
   onTunePlayerELO: (username: string, nextPoints: number) => void;
   onToggleAdminStatus?: (username: string, nextAdmin: boolean) => void;
   onAddPlayer?: (newPlayer: MinecraftPlayer) => void;
@@ -71,6 +71,10 @@ export default function AdminDashboard({
   // ELO tune states
   const [editingPlayerUsername, setEditingPlayerUsername] = useState<string | null>(null);
   const [eloValueInput, setEloValueInput] = useState(50);
+
+  // Ban duration prompt states
+  const [banningPlayerUsername, setBanningPlayerUsername] = useState<string | null>(null);
+  const [banDurationDays, setBanDurationDays] = useState<number>(30); // default to 30 days
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,6 +229,7 @@ export default function AdminDashboard({
   const [newUuid, setNewUuid] = useState('');
   const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [newIsUnoriginal, setNewIsUnoriginal] = useState(false);
+  const [newIsTester, setNewIsTester] = useState(false);
   const [newCustomAvatarUrl, setNewCustomAvatarUrl] = useState('');
   const [newCustomBodyUrl, setNewCustomBodyUrl] = useState('');
   const [addFormError, setAddFormError] = useState('');
@@ -236,6 +241,7 @@ export default function AdminDashboard({
   const [editUuid, setEditUuid] = useState('');
   const [editIsAdmin, setEditIsAdmin] = useState(false);
   const [editIsUnoriginal, setEditIsUnoriginal] = useState(false);
+  const [editIsTester, setEditIsTester] = useState(false);
   const [editCustomAvatarUrl, setEditCustomAvatarUrl] = useState('');
   const [editCustomBodyUrl, setEditCustomBodyUrl] = useState('');
   const [editFormError, setEditFormError] = useState('');
@@ -348,6 +354,7 @@ export default function AdminDashboard({
     setNewUuid('');
     setNewIsAdmin(false);
     setNewIsUnoriginal(false);
+    setNewIsTester(false);
     setNewCustomAvatarUrl('');
     setNewCustomBodyUrl('');
     setAddFormError('');
@@ -367,6 +374,7 @@ export default function AdminDashboard({
     setEditUuid(player.uuid);
     setEditIsAdmin(!!player.isAdmin);
     setEditIsUnoriginal(!!player.isUnoriginal);
+    setEditIsTester(!!player.isTester);
     setEditCustomAvatarUrl(player.customAvatarUrl || '');
     setEditCustomBodyUrl(player.customBodyUrl || '');
     setEditFormError('');
@@ -449,6 +457,7 @@ export default function AdminDashboard({
       isBanned: false,
       isAdmin: newIsAdmin,
       isUnoriginal: newIsUnoriginal,
+      isTester: newIsTester,
       customAvatarUrl: newCustomAvatarUrl.trim() || undefined,
       customBodyUrl: newCustomBodyUrl.trim() || undefined,
       skinTimestamp: Date.now()
@@ -500,6 +509,7 @@ export default function AdminDashboard({
       uuid: editUuid.trim() || editingPlayer.uuid,
       isAdmin: editIsAdmin,
       isUnoriginal: editIsUnoriginal,
+      isTester: editIsTester,
       stats: modeStats,
       customAvatarUrl: editCustomAvatarUrl.trim() || undefined,
       customBodyUrl: editCustomBodyUrl.trim() || undefined,
@@ -956,9 +966,9 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <div className="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-4 py-1">
+                <div className="col-span-12 grid grid-cols-1 md:grid-cols-3 gap-4 py-1">
                   {/* Admin Staff Toggle */}
-                  <div className="flex items-center justify-between p-3.5 bg-zinc-950/40 border border-zinc-850 rounded-xl">
+                  <div className="flex items-center justify-between p-3.5 bg-zinc-950/20 border border-zinc-900 rounded-xl">
                     <div className="text-left">
                       <span className="text-[11px] font-mono text-zinc-300 uppercase tracking-wider block font-bold leading-none">
                         Admin / Staff Privileges
@@ -983,7 +993,7 @@ export default function AdminDashboard({
                   </div>
 
                   {/* Unoriginal Account Toggle Lever */}
-                  <div className="flex items-center justify-between p-3.5 bg-zinc-950/40 border border-zinc-850 rounded-xl">
+                  <div className="flex items-center justify-between p-3.5 bg-zinc-950/20 border border-zinc-900 rounded-xl">
                     <div className="text-left">
                       <span className="text-[11px] font-mono text-zinc-300 uppercase tracking-wider block font-bold leading-none">
                         Unoriginal Account (Offline)
@@ -1002,6 +1012,32 @@ export default function AdminDashboard({
                       <span
                         className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow-lg ring-0 transition duration-200 ease-in-out ${
                           editIsUnoriginal ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Tester status Toggle */}
+                  <div className="flex items-center justify-between p-3.5 bg-zinc-950/20 border border-zinc-900 rounded-xl">
+                    <div className="text-left">
+                      <span className="text-[11px] font-mono text-zinc-300 uppercase tracking-wider block font-bold leading-none">
+                        Certified Tester / Evaluator
+                      </span>
+                      <span className="text-[9px] font-mono text-zinc-500 block mt-1.5 leading-tight">
+                        Flag as a registered tester on the system
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      id="edit-tester-btn"
+                      onClick={() => setEditIsTester(!editIsTester)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                        editIsTester ? 'bg-amber-500 shadow-sm shadow-amber-500/20' : 'bg-zinc-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          editIsTester ? 'translate-x-4' : 'translate-x-0'
                         }`}
                       />
                     </button>
@@ -1130,7 +1166,7 @@ export default function AdminDashboard({
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
                             <img
-                              src={getMinecraftAvatar(p.customAvatarUrl || p.uuid, 32)}
+                              src={getCorrectAvatar(p, 32)}
                               alt={p.username}
                               referrerPolicy="no-referrer"
                               className="w-6 h-6 rounded shrink-0 object-contain bg-zinc-900 pointer-events-none select-none"
@@ -1146,6 +1182,11 @@ export default function AdminDashboard({
                                 {p.isAdmin && (
                                   <span className="text-[8px] font-mono font-black text-[#ffab00] bg-amber-950/50 border border-[#ffab00]/30 px-1.5 py-0.5 rounded leading-none uppercase tracking-wider">
                                     ADMIN
+                                  </span>
+                                )}
+                                {p.isTester && (
+                                  <span className="text-[8px] font-mono font-black text-red-500 bg-red-950/50 border border-red-500/30 px-1.5 py-0.5 rounded leading-none uppercase tracking-wider">
+                                    TESTER
                                   </span>
                                 )}
                               </div>
@@ -1202,9 +1243,22 @@ export default function AdminDashboard({
                         {/* 4 */}
                         <td className="py-3 px-4 text-center font-mono">
                           {p.isBanned ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold text-red-400 bg-red-950/25 border border-red-500/25 uppercase">
-                              <AlertTriangle className="w-3 h-3 animate-pulse" />
-                              BANNED
+                            <span className="inline-block px-2 py-1 rounded text-[10px] font-bold text-red-400 bg-red-950/25 border border-red-500/25 uppercase text-left min-w-[90px]">
+                              <div className="flex items-center gap-1 justify-center">
+                                <AlertTriangle className="w-3 h-3 text-red-500 animate-pulse shrink-0" />
+                                <span>BANNED</span>
+                              </div>
+                              {p.banExpiresAt ? (
+                                <span className="block text-[8px] font-medium font-mono text-zinc-400 mt-1 text-center whitespace-nowrap">
+                                  {(() => {
+                                    const diffMs = new Date(p.banExpiresAt).getTime() - Date.now();
+                                    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                                    return diffDays > 0 ? `${diffDays}d left` : 'Expired';
+                                  })()}
+                                </span>
+                              ) : (
+                                <span className="block text-[8px] font-medium font-mono text-zinc-500 mt-1 text-center">Permanent</span>
+                              )}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold text-green-400 bg-green-950/25 border border-green-500/25 uppercase">
@@ -1236,17 +1290,56 @@ export default function AdminDashboard({
                                 {p.isAdmin ? 'REVOKE STAFF' : 'GRANT STAFF'}
                               </button>
                             )}
-                            <button
-                              id={`ban-toggle-${p.username}`}
-                              onClick={() => onModifyBlockStatus(p.username, !p.isBanned)}
-                              className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${
-                                p.isBanned
-                                  ? 'bg-green-950/30 text-green-400 border border-green-500/25 hover:bg-green-500/25'
-                                  : 'bg-red-950/30 text-red-400 border border-red-500/25 hover:bg-red-500/25'
-                              }`}
-                            >
-                              {p.isBanned ? 'Quash ban' : 'QUARANTINE'}
-                            </button>
+                            {banningPlayerUsername === p.username ? (
+                              <div className="flex items-center gap-1 bg-red-950/20 border border-red-500/30 p-1 rounded-lg">
+                                <select
+                                  value={banDurationDays}
+                                  onChange={(e) => setBanDurationDays(Number(e.target.value))}
+                                  className="bg-black text-[10px] text-red-400 border border-red-950/40 px-1 py-1 rounded font-mono font-bold outline-none uppercase"
+                                >
+                                  <option value={1} className="bg-zinc-950">1 Day</option>
+                                  <option value={7} className="bg-zinc-950">7 Days</option>
+                                  <option value={30} className="bg-zinc-950">30 Days</option>
+                                  <option value={90} className="bg-zinc-950">90 Days</option>
+                                  <option value={365} className="bg-zinc-950">1 Year</option>
+                                  <option value={0} className="bg-zinc-950">Permanent</option>
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    onModifyBlockStatus(p.username, true, banDurationDays);
+                                    setBanningPlayerUsername(null);
+                                  }}
+                                  className="px-2 py-1 bg-red-500 hover:bg-red-400 text-black font-mono text-[9px] font-bold uppercase rounded cursor-pointer transition-colors"
+                                >
+                                  BAN
+                                </button>
+                                <button
+                                  onClick={() => setBanningPlayerUsername(null)}
+                                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-mono text-[9px] font-bold uppercase rounded cursor-pointer transition-colors"
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                id={`ban-toggle-${p.username}`}
+                                onClick={() => {
+                                  if (p.isBanned) {
+                                    onModifyBlockStatus(p.username, false);
+                                  } else {
+                                    setBanningPlayerUsername(p.username);
+                                    setBanDurationDays(30);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${
+                                  p.isBanned
+                                    ? 'bg-green-950/30 text-green-400 border border-green-500/25 hover:bg-green-500/25'
+                                    : 'bg-red-950/30 text-red-400 border border-red-500/25 hover:bg-red-500/25'
+                                }`}
+                              >
+                                {p.isBanned ? 'Quash ban' : 'QUARANTINE'}
+                              </button>
+                            )}
                             {onDeletePlayer && (
                               <>
                                 {deletingPlayerUsername === p.username ? (
@@ -1334,11 +1427,11 @@ export default function AdminDashboard({
                 <div className="flex justify-between text-zinc-400 mb-1 leading-none uppercase">
                   <span>Elite Tiers (HT1 / LT1 / HT2)</span>
                   <span className="text-[#39FF14] font-bold">
-                    {players.filter(p => p.overallRank.startsWith('H1') || p.overallRank === 'LT1' || p.overallRank === 'HT2').length} players
+                    {players.filter(p => p.overallRank === 'HT1' || p.overallRank === 'LT1' || p.overallRank === 'HT2').length} players
                   </span>
                 </div>
                 <div className="w-full bg-zinc-950 h-2.5 rounded-full border border-zinc-900 overflow-hidden">
-                  <div className="bg-emerald-500 h-full" style={{ width: `${(players.filter(p => p.overallRank.startsWith('H1') || p.overallRank === 'LT1' || p.overallRank === 'HT2').length / totalUsers) * 100}%` }} />
+                  <div className="bg-emerald-500 h-full" style={{ width: `${(players.filter(p => p.overallRank === 'HT1' || p.overallRank === 'LT1' || p.overallRank === 'HT2').length / (totalUsers || 1)) * 100}%` }} />
                 </div>
               </div>
 
@@ -1346,11 +1439,11 @@ export default function AdminDashboard({
                 <div className="flex justify-between text-zinc-400 mb-1 leading-none uppercase">
                   <span>Mid Level Combatants (LT2 / HT3 / LT3 / HT4)</span>
                   <span className="text-zinc-200 font-bold">
-                    {players.filter(p => !p.overallRank.startsWith('HT1') && !p.overallRank.startsWith('LT1') && !p.overallRank.startsWith('LT5') && !p.overallRank.startsWith('HT5') && p.overallRank !== 'HT2').length} players
+                    {players.filter(p => p.overallRank === 'LT2' || p.overallRank === 'HT3' || p.overallRank === 'LT3' || p.overallRank === 'HT4').length} players
                   </span>
                 </div>
                 <div className="w-full bg-zinc-950 h-2.5 rounded-full border border-zinc-900 overflow-hidden">
-                  <div className="bg-blue-500 h-full" style={{ width: `${(players.filter(p => !p.overallRank.startsWith('HT1') && !p.overallRank.startsWith('LT1') && !p.overallRank.startsWith('LT5') && !p.overallRank.startsWith('HT5') && p.overallRank !== 'HT2').length / totalUsers) * 100}%` }} />
+                  <div className="bg-blue-500 h-full" style={{ width: `${(players.filter(p => p.overallRank === 'LT2' || p.overallRank === 'HT3' || p.overallRank === 'LT3' || p.overallRank === 'HT4').length / (totalUsers || 1)) * 100}%` }} />
                 </div>
               </div>
 
@@ -1362,7 +1455,7 @@ export default function AdminDashboard({
                   </span>
                 </div>
                 <div className="w-full bg-zinc-950 h-2.5 rounded-full border border-zinc-900 overflow-hidden">
-                  <div className="bg-zinc-650 h-full" style={{ width: `${(players.filter(p => p.overallRank === 'LT4' || p.overallRank === 'HT5' || p.overallRank === 'LT5').length / totalUsers) * 100}%` }} />
+                  <div className="bg-zinc-650 h-full" style={{ width: `${(players.filter(p => p.overallRank === 'LT4' || p.overallRank === 'HT5' || p.overallRank === 'LT5').length / (totalUsers || 1)) * 100}%` }} />
                 </div>
               </div>
             </div>

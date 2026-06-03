@@ -2,7 +2,7 @@ import React from 'react';
 import { MinecraftPlayer, GameMode, RankTier } from '../types';
 import { getMinecraftAvatar, getCorrectBodyRender, getCorrectAvatar, fetchMinecraftProfile } from '../utils/minecraft';
 import { RANK_TIERS } from '../mockData';
-import { X, ExternalLink, Award, RefreshCw } from 'lucide-react';
+import { X, ExternalLink, Award } from 'lucide-react';
 import { motion } from 'motion/react';
 import { GameModeIcon } from './LeaderboardsPage';
 
@@ -44,46 +44,6 @@ const getTierColorClass = (tier: RankTier): string => {
 };
 
 export default function PlayerProfile({ player, allPlayers, onClose, onUpdatePlayer }: PlayerProfileProps) {
-  const [isSyncing, setIsSyncing] = React.useState(false);
-  const [syncSuccess, setSyncSuccess] = React.useState(false);
-
-  const handleSyncSkin = async () => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    setSyncSuccess(false);
-
-    try {
-      const newTimestamp = Date.now();
-      let updatedCustomAvatarUrl = player.customAvatarUrl;
-      let updatedCustomBodyUrl = player.customBodyUrl;
-
-      if (!player.isUnoriginal) {
-        try {
-          const profile = await fetchMinecraftProfile(player.username);
-          updatedCustomAvatarUrl = profile.avatarUrl;
-          updatedCustomBodyUrl = profile.bodyUrl;
-        } catch (e) {
-          console.warn("Mojang sync failed, using timestamp cache buster", e);
-        }
-      }
-
-      if (onUpdatePlayer) {
-        onUpdatePlayer(player.username, {
-          ...player,
-          customAvatarUrl: updatedCustomAvatarUrl,
-          customBodyUrl: updatedCustomBodyUrl,
-          skinTimestamp: newTimestamp
-        });
-      }
-      setSyncSuccess(true);
-      setTimeout(() => setSyncSuccess(false), 2000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // Sort and retrieve numeric overall position order
   const position = allPlayers
     ? [...allPlayers]
@@ -159,8 +119,13 @@ export default function PlayerProfile({ player, allPlayers, onClose, onUpdatePla
           </div>
 
           {/* Username */}
-          <h2 className="text-2xl font-sans font-black tracking-tight text-white mt-3 relative">
+          <h2 className="text-2xl font-sans font-black tracking-tight text-white mt-3 flex items-center justify-center gap-2">
             {player.username}
+            {player.isTester && (
+              <span className="inline-flex items-center gap-1 text-[8.5px] font-mono font-black text-red-500 bg-red-950/40 border border-red-500/30 px-2 py-0.5 rounded uppercase tracking-wider">
+                Tester
+              </span>
+            )}
           </h2>
 
         {/* Elite combat title with gold/yellow elements */}
@@ -174,7 +139,7 @@ export default function PlayerProfile({ player, allPlayers, onClose, onUpdatePla
           {cosmeticRegion}
         </span>
 
-        {/* Button hub: NameMC and Sync/Refresh skin */}
+        {/* Button hub: NameMC link */}
         <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
           <a
             href={`https://namemc.com/profile/${player.username}`}
@@ -185,18 +150,6 @@ export default function PlayerProfile({ player, allPlayers, onClose, onUpdatePla
             <span className="bg-[#121824] text-[10px] font-sans lowercase shrink-0">n</span>
             NameMC <ExternalLink className="w-3 h-3 text-zinc-550 shrink-0" />
           </a>
-
-          <button
-            onClick={handleSyncSkin}
-            disabled={isSyncing}
-            className={`shrink-0 inline-flex items-center gap-2 bg-[#121824] border border-zinc-800 text-zinc-400 px-4 py-1.5 rounded-xl text-[10px] font-bold font-mono tracking-widest uppercase transition-all shadow-sm cursor-pointer ${
-              isSyncing ? 'opacity-80' : 'hover:border-zinc-700/80 hover:bg-[#1a2333]/90 hover:text-white'
-            }`}
-            title="Update/Sync latest Minecraft skin and avatar renders"
-          >
-            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-550'}`} />
-            {isSyncing ? 'Syncing...' : syncSuccess ? 'Synced!' : 'Sync Skin'}
-          </button>
         </div>
 
         {/* POSITION MODULE REPRESENTAL */}

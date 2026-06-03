@@ -762,7 +762,7 @@ export default function PvPTestSystem({ currentMode, onTestComplete, userRank }:
               <div className="flex flex-col p-2">
                 <div className="flex justify-between text-xs font-mono text-zinc-500 mb-4 pb-2 border-b border-zinc-900">
                   <span>BATTLETACTIC PROFILE {strategyIndex + 1} OF {SCENARIOS.length}</span>
-                  <span className="text-[#39FF14]">XP ACCUMULATING</span>
+                  <span className="text-[#39FF14]">PRACTICE RUN</span>
                 </div>
                 
                 <div className="mb-6">
@@ -851,15 +851,15 @@ export default function PvPTestSystem({ currentMode, onTestComplete, userRank }:
                 TEST COMPLETED SUCCESSFULLY
               </span>
               <h3 className="text-2xl font-sans font-extrabold text-white mt-1.5 leading-tight">
-                Points Calculated
+                Practice Score
               </h3>
 
               <div className="my-6">
                 <span className="text-5xl font-mono font-extrabold bg-gradient-to-r from-emerald-400 to-[#39FF14] bg-clip-text text-transparent drop-shadow-lg">
-                  {testResult.score} PTS
+                  {testResult.score}%
                 </span>
                 <span className="block text-[10px] font-mono uppercase text-zinc-500 tracking-wider mt-1.5">
-                  ESTIMATING {getRankByPoints(testResult.score)} COMPETITIVE BRACKET
+                  ESTIMATING {getRankByPoints(testResult.score)} PERFORMANCE BRACKET • PRACTICE RUN
                 </span>
               </div>
 
@@ -884,7 +884,7 @@ export default function PvPTestSystem({ currentMode, onTestComplete, userRank }:
                   onClick={handleSaveResult}
                   className="flex-1 bg-[#39FF14] text-black font-mono font-bold text-xs uppercase tracking-widest py-3 rounded-lg hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-[#39FF14]/20"
                 >
-                  SAVE RECORD & UPDATE STATS
+                  CONCLUDE PRACTICE CHALLENGE
                 </button>
                 <button
                   id="retry-test-btn"

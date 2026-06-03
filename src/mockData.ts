@@ -176,6 +176,7 @@ export const MOCK_PLAYERS: MinecraftPlayer[] = [
     overallPoints: 95,
     winRate: 82.3,
     joinedDate: '2025-01-15',
+    isTester: true,
     achievements: [
       { id: '1', title: 'Perfect Aim', description: 'Reach 95% accuracy in sword evaluation tests', iconName: 'target', unlockedAt: '2025-02-01' },
       { id: '2', title: 'Click God', description: 'Surpass 16 CPS in click frequency tests', iconName: 'zap', unlockedAt: '2025-02-15' },
@@ -222,6 +223,7 @@ export const MOCK_PLAYERS: MinecraftPlayer[] = [
     overallPoints: 94,
     winRate: 81.6,
     joinedDate: '2024-06-01',
+    isTester: true,
     achievements: [
       { id: '1', title: 'Infinite Streaks', description: 'Maintain a 50+ win streak in UHC PvP', iconName: 'flame', unlockedAt: '2024-07-01' },
       { id: '2', title: 'The Blade Only Dies Once', description: 'Defeat 15 players in diamond combat with 1 heart left', iconName: 'skull', unlockedAt: '2024-08-10' },

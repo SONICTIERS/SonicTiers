@@ -59,6 +59,18 @@ export const getMinecraftBodyRender = (usernameOrUuid: string, size = 200, skinT
  */
 export const getCorrectBodyRender = (player: any, size = 200): string => {
   if (!player) return '';
+
+  // If player is premium, fetch from high-quality mc-heads.net using UUID (best for instant skin updates and overlays!)
+  if (!player.isUnoriginal && player.uuid) {
+    const isFallbackUuid = player.uuid === STEVE_UUID || player.uuid === ALEX_UUID;
+    const identifier = isFallbackUuid ? player.username : player.uuid.replace(/-/g, '');
+    const baseUrl = `https://mc-heads.net/body/${identifier}/${size}`;
+    if (player.skinTimestamp) {
+      return `${baseUrl}?t=${player.skinTimestamp}`;
+    }
+    return baseUrl;
+  }
+
   const url = player.customBodyUrl;
   let resultUrl = '';
   if (url) {
@@ -88,6 +100,18 @@ export const getCorrectBodyRender = (player: any, size = 200): string => {
  */
 export const getCorrectAvatar = (player: any, size = 64): string => {
   if (!player) return '';
+
+  // If player is premium, fetch from high-quality mc-heads.net using UUID (best for instant skin updates and overlays!)
+  if (!player.isUnoriginal && player.uuid) {
+    const isFallbackUuid = player.uuid === STEVE_UUID || player.uuid === ALEX_UUID;
+    const identifier = isFallbackUuid ? player.username : player.uuid.replace(/-/g, '');
+    const baseUrl = `https://mc-heads.net/avatar/${identifier}/${size}`;
+    if (player.skinTimestamp) {
+      return `${baseUrl}?t=${player.skinTimestamp}`;
+    }
+    return baseUrl;
+  }
+
   const url = player.customAvatarUrl;
   let resultUrl = '';
   if (url) {
@@ -147,8 +171,8 @@ export const fetchMinecraftProfile = async (username: string): Promise<MojangPro
       return {
         username: player.username,
         uuid: player.id,
-        avatarUrl: player.avatar || `https://crafatar.com/avatars/${player.id}?overlay`,
-        bodyUrl: `https://crafatar.com/renders/body/${player.id}?overlay`,
+        avatarUrl: `https://mc-heads.net/avatar/${player.id}/64`,
+        bodyUrl: `https://mc-heads.net/body/${player.id}/200`,
         skinFileUrl: player.skin_texture || null,
       };
     } else {
@@ -164,8 +188,8 @@ export const fetchMinecraftProfile = async (username: string): Promise<MojangPro
     return {
       username: cleanUsername,
       uuid: uuid,
-      avatarUrl: `https://minotar.net/avatar/${cleanUsername}/64.png`,
-      bodyUrl: `https://minotar.net/armor/body/${cleanUsername}/200.png`,
+      avatarUrl: `https://mc-heads.net/avatar/${cleanUsername}/64`,
+      bodyUrl: `https://mc-heads.net/body/${cleanUsername}/200`,
     };
   }
 };

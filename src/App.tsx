@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GameMode, MinecraftPlayer, RankTier, AdminSettings, MatchHistoryItem } from './types';
 import { MOCK_PLAYERS, RANK_TIERS, getRankByPoints, GAME_MODES } from './mockData';
-import { getMinecraftAvatar } from './utils/minecraft';
+import { getMinecraftAvatar, getCorrectAvatar } from './utils/minecraft';
 
 // View components
 import LandingPage from './components/LandingPage';
@@ -184,6 +184,31 @@ export default function App() {
       }
     }
 
+    if (matched && matched.isBanned) {
+      if (matched.banExpiresAt) {
+        const expires = new Date(matched.banExpiresAt);
+        const now = new Date();
+        if (expires > now) {
+          const diffMs = expires.getTime() - now.getTime();
+          const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+          alert(`ACCESS DENIED: Your account is suspended. Ban expires in ${diffDays} day(s).`);
+          return;
+        } else {
+          // Ban has expired! Lift it automatically
+          matched.isBanned = false;
+          matched.banDurationDays = undefined;
+          matched.banStartDate = undefined;
+          matched.banExpiresAt = undefined;
+          
+          const updated = players.map(p => p.username.toLowerCase() === username.toLowerCase() ? matched! : p);
+          updatePlayersDB(updated);
+        }
+      } else {
+        alert("ACCESS DENIED: Your account is suspended permanently.");
+        return;
+      }
+    }
+
     setCurrentUser(matched);
     localStorage.setItem('sonictiers_current_user', JSON.stringify(matched));
     setActivePage('profile');
@@ -208,66 +233,26 @@ export default function App() {
     const userInDb = players.find(p => p.username === currentUser.username);
     if (!userInDb) return;
 
-    // Preserve old scores to inspect checks
-    const oldPoints = userInDb.stats[mode].points;
-    const oldRank = userInDb.stats[mode].rank;
+    // Under "just for fun" requirements, we do NOT modify the user's competitive points, levels, or rank ratings.
+    const nextPoints = userInDb.stats[mode].points;
+    const nextRank = userInDb.stats[mode].rank;
 
-    // The score represents points ELO directly for simplified gameplay!
-    const nextPoints = score;
-    const nextRank = getRankByPoints(nextPoints);
+    const nextLvExp = userInDb.xpPoints;
+    const nextLevel = userInDb.xpLevel;
 
-    // Increment levels and statistics
-    const nextLvExp = userInDb.xpPoints + score * 3;
-    const nextLevel = Math.floor(nextLvExp / 400) + 1; // 400xp per level scale
-
-    // Construct a random battle log entry to simulate competitive ELO matching
-    const sampleOpponents = players.filter(p => p.username !== currentUser.username);
-    const chosenOpponent = sampleOpponents[Math.floor(Math.random() * sampleOpponents.length)] || { username: 'Alex', uuid: '09c6253c-f4b6-4b21-9d8e-171b3e6afbc0' };
-    
-    // Outcome depends on whether score matches high index
-    const isWinOutcome = score > 40;
-    const pointsChange = isWinOutcome ? Math.floor(2 + Math.random() * 2) : -Math.floor(1 + Math.random() * 2);
-
-    const logEntry: MatchHistoryItem = {
-      id: `match_${Date.now()}`,
-      opponent: chosenOpponent.username,
-      opponentUuid: chosenOpponent.uuid,
-      result: isWinOutcome ? 'WIN' : 'LOSS',
-      mode: mode,
-      pointsChange: pointsChange,
-      date: new Date().toISOString().split('T')[0]
-    };
-
-    // Calculate aggregated mode division modifiers
+    // Calculate aggregated mode division modifiers (only update personal bests for CPS/accuracy)
     const activeStat = userInDb.stats[mode];
-    const newWins = isWinOutcome ? activeStat.wins + 1 : activeStat.wins;
-    const newLosses = !isWinOutcome ? activeStat.losses + 1 : activeStat.losses;
-    const totalRuns = newWins + newLosses || 1;
 
     const finalModeStats = {
       ...activeStat,
-      points: nextPoints,
-      rank: nextRank,
-      wins: newWins,
-      losses: newLosses,
-      winRate: parseFloat(((newWins / totalRuns) * 100).toFixed(1)),
-      kdRatio: parseFloat((activeStat.kdRatio || 1 + (isWinOutcome ? 0.05 : -0.05)).toFixed(2)),
-      accuracy: testStats.accuracy !== undefined ? testStats.accuracy : activeStat.accuracy || 70,
-      cps: testStats.cps !== undefined ? testStats.cps : activeStat.cps || 8.5
+      points: activeStat.points, // Points frozen
+      rank: activeStat.rank,     // Ranks frozen
+      accuracy: testStats.accuracy !== undefined ? Math.max(activeStat.accuracy || 0, testStats.accuracy) : activeStat.accuracy || 70,
+      cps: testStats.cps !== undefined ? Math.max(activeStat.cps || 0, testStats.cps) : activeStat.cps || 8.5
     };
 
-    // Update achievements unlocked based on progress
+    // Update achievements unlocked based on progress (still allow click/CPS achievement for fun)
     const activeAchievements = [...userInDb.achievements];
-    
-    if (nextPoints >= 90 && !activeAchievements.some(a => a.id === 'ach_ht1')) {
-      activeAchievements.push({
-        id: 'ach_ht1',
-        title: 'Tier Apex Elite',
-        description: `Ascend to High Tier 1 in ${mode} evaluation modes`,
-        iconName: 'crown',
-        unlockedAt: new Date().toISOString().split('T')[0]
-      });
-    }
 
     if (testStats.cps && testStats.cps >= 12 && !activeAchievements.some(a => a.id === 'ach_cps_god')) {
       activeAchievements.push({
@@ -285,20 +270,13 @@ export default function App() {
       [mode]: finalModeStats
     };
 
-    // calculate overall average points
-    const allPointsList = Object.values(finalStats).map((s: any) => s.points);
-    const overallPointsAverage = Math.floor(allPointsList.reduce((sum, p) => sum + p, 0) / allPointsList.length);
-    const overallRankAverage = getRankByPoints(overallPointsAverage);
-
     const updatedUser: MinecraftPlayer = {
       ...userInDb,
       xpLevel: nextLevel,
       xpPoints: nextLvExp,
       stats: finalStats as Record<GameMode, any>,
-      overallPoints: overallPointsAverage,
-      overallRank: overallRankAverage,
-      winRate: parseFloat((players.reduce((sum, p) => sum + p.winRate, 0) / players.length).toFixed(1)), // mock overall proxy
-      matchHistory: [logEntry, ...(userInDb.matchHistory || [])].slice(0, 10), // cap at 10 items
+      overallPoints: userInDb.overallPoints,
+      overallRank: userInDb.overallRank,
       achievements: activeAchievements
     };
 
@@ -307,17 +285,6 @@ export default function App() {
     updatePlayersDB(nextPlayers);
     setCurrentUser(updatedUser);
     localStorage.setItem('sonictiers_current_user', JSON.stringify(updatedUser));
-
-    // Handle full screen tier promotion celebration!
-    // Triggers if rank advances across bracket (e.g. they promote in the overall standings)
-    if (nextRank !== oldRank && nextPoints > oldPoints) {
-      setPromotionCelebration({
-        prevRank: oldRank,
-        nextRank: nextRank,
-        points: nextPoints
-      });
-      playPromotionBell();
-    }
   };
 
   // Admin controls
@@ -325,14 +292,43 @@ export default function App() {
     setSettings(nextConfig);
   };
 
-  const handleAdminModifyBlockStatus = (username: string, nextBanned: boolean) => {
+  const handleAdminModifyBlockStatus = (username: string, nextBanned: boolean, durationDays?: number) => {
+    let shouldLogoutUser = false;
     const updated = players.map(p => {
       if (p.username === username) {
-        return { ...p, isBanned: nextBanned };
+        if (nextBanned) {
+          shouldLogoutUser = true;
+          const banStartDate = new Date().toISOString().split('T')[0];
+          let banExpiresAt: string | undefined = undefined;
+          if (durationDays && durationDays > 0) {
+            const expDate = new Date();
+            expDate.setDate(expDate.getDate() + durationDays);
+            banExpiresAt = expDate.toISOString();
+          }
+          return {
+            ...p,
+            isBanned: true,
+            banDurationDays: durationDays,
+            banStartDate,
+            banExpiresAt
+          };
+        } else {
+          return {
+            ...p,
+            isBanned: false,
+            banDurationDays: undefined,
+            banStartDate: undefined,
+            banExpiresAt: undefined
+          };
+        }
       }
       return p;
     });
     updatePlayersDB(updated);
+
+    if (shouldLogoutUser && currentUser && currentUser.username.toLowerCase() === username.toLowerCase()) {
+      handleLogout();
+    }
   };
 
   const handleAdminTunePlayerELO = (username: string, nextPoints: number) => {
@@ -540,8 +536,8 @@ export default function App() {
                         className="flex items-center gap-2.5 p-2 hover:bg-zinc-900/80 rounded-lg cursor-pointer transition-colors text-left"
                       >
                         <img 
-                          src={getMinecraftAvatar(p.customAvatarUrl || p.username, 24)} 
-                          className="w-5 h-5 rounded object-contain shrink-0" 
+                          src={getCorrectAvatar(p, 24)} 
+                          className="w-5 h-5 rounded object-contain shrink-0 bg-zinc-900/40" 
                           alt={p.username} 
                           referrerPolicy="no-referrer"
                         />
@@ -567,7 +563,7 @@ export default function App() {
                   onClick={() => navigateTo('profile')}
                   className="px-3 py-2 bg-zinc-900/90 hover:bg-[#141622] text-zinc-350 hover:text-white rounded-xl text-xs font-bold font-sans flex items-center gap-2 transition-all border border-[#1e2030] cursor-pointer shadow-sm shrink-0"
                 >
-                  <img src={getMinecraftAvatar(currentUser.customAvatarUrl || currentUser.username, 20)} className="w-4 h-4 rounded shrink-0 object-contain" alt="" referrerPolicy="no-referrer" />
+                  <img src={getCorrectAvatar(currentUser, 20)} className="w-4 h-4 rounded shrink-0 object-contain bg-zinc-900/40" alt="" referrerPolicy="no-referrer" />
                   <span className="hidden sm:inline">My Profile</span>
                 </button>
                 <button
@@ -677,10 +673,10 @@ export default function App() {
                     <div className="flex items-center gap-3">
                       <div className="w-7 h-7 bg-zinc-900 rounded p-1 flex items-center justify-center border border-zinc-850 overflow-hidden">
                         <img
-                          src={getMinecraftAvatar(currentUser.customAvatarUrl || currentUser.username, 24)}
+                          src={getCorrectAvatar(currentUser, 24)}
                           alt={currentUser.username}
                           referrerPolicy="no-referrer"
-                          className="w-5 h-5 rounded"
+                          className="w-5 h-5 rounded bg-zinc-900/40"
                         />
                       </div>
                       <span className="text-white text-xs font-bold">
@@ -822,7 +818,7 @@ export default function App() {
                               {players.filter(p => p.isAdmin).length > 0 ? (
                                 players.filter(p => p.isAdmin).map(p => (
                                   <div key={p.username} className="flex items-center gap-1.5 bg-zinc-950/80 border border-zinc-900/60 py-1.5 px-2.5 rounded-lg text-xs font-bold text-white">
-                                    <img src={getMinecraftAvatar(p.customAvatarUrl || p.username, 16)} className="w-4 h-4 rounded-sm object-contain bg-zinc-900" referrerPolicy="no-referrer" alt="" />
+                                    <img src={getCorrectAvatar(p, 16)} className="w-4 h-4 rounded-sm object-contain bg-zinc-900" referrerPolicy="no-referrer" alt="" />
                                     <span>{p.username}</span>
                                   </div>
                                 ))
