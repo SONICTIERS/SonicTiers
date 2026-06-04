@@ -60,7 +60,34 @@ export const getMinecraftBodyRender = (usernameOrUuid: string, size = 200, skinT
 export const getCorrectBodyRender = (player: any, size = 200): string => {
   if (!player) return '';
 
-  // If player is premium, fetch from high-quality mc-heads.net using UUID (best for instant skin updates and overlays!)
+  // 1. Prioritize explicitly custom loaded or uploaded skin templates first!
+  const url = player.customBodyUrl;
+  let resultUrl = '';
+  if (url) {
+    if (url.includes('crafatar.com/renders/body/')) {
+      const parts = url.split('/body/');
+      if (parts.length > 1) {
+        const uuid = parts[1].split('?')[0];
+        resultUrl = `https://mc-heads.net/body/${uuid}/${size}`;
+      }
+    } else if (
+      player.isUnoriginal ||
+      url.startsWith('data:') ||
+      (!url.includes('mc-heads.net/body/') && !url.includes('crafatar.com') && !url.includes('minotar.net'))
+    ) {
+      resultUrl = url;
+    }
+  }
+
+  if (resultUrl) {
+    if (player.skinTimestamp && !resultUrl.startsWith('data:')) {
+      const separator = resultUrl.includes('?') ? '&' : '?';
+      return `${resultUrl}${separator}t=${player.skinTimestamp}`;
+    }
+    return resultUrl;
+  }
+
+  // 2. If no custom skin is set, and the player is a premium user with a UUID, fetch from high-quality mc-heads.net
   if (!player.isUnoriginal && player.uuid) {
     const isFallbackUuid = player.uuid === STEVE_UUID || player.uuid === ALEX_UUID;
     const identifier = isFallbackUuid ? player.username : player.uuid.replace(/-/g, '');
@@ -71,23 +98,8 @@ export const getCorrectBodyRender = (player: any, size = 200): string => {
     return baseUrl;
   }
 
-  const url = player.customBodyUrl;
-  let resultUrl = '';
-  if (url) {
-    if (url.includes('crafatar.com/renders/body/')) {
-      const parts = url.split('/body/');
-      if (parts.length > 1) {
-        const uuid = parts[1].split('?')[0];
-        resultUrl = `https://mc-heads.net/body/${uuid}/${size}`;
-      }
-    } else if (player.isUnoriginal || url.startsWith('data:') || (!url.includes('crafatar.com') && !url.includes('minotar.net'))) {
-      resultUrl = url;
-    }
-  }
-  if (!resultUrl) {
-    resultUrl = getMinecraftBodyRender(player.username, size);
-  }
-  // Add browser cache buster if skinTimestamp exists
+  // 3. Absolute fallback is username-based body rendering
+  resultUrl = getMinecraftBodyRender(player.username, size);
   if (player.skinTimestamp && !resultUrl.startsWith('data:')) {
     const separator = resultUrl.includes('?') ? '&' : '?';
     return `${resultUrl}${separator}t=${player.skinTimestamp}`;
@@ -101,7 +113,34 @@ export const getCorrectBodyRender = (player: any, size = 200): string => {
 export const getCorrectAvatar = (player: any, size = 64): string => {
   if (!player) return '';
 
-  // If player is premium, fetch from high-quality mc-heads.net using UUID (best for instant skin updates and overlays!)
+  // 1. Prioritize explicitly custom loaded or uploaded skin templates first!
+  const url = player.customAvatarUrl;
+  let resultUrl = '';
+  if (url) {
+    if (url.includes('crafatar.com/avatars/')) {
+      const parts = url.split('/avatars/');
+      if (parts.length > 1) {
+        const uuid = parts[1].split('?')[0];
+        resultUrl = `https://mc-heads.net/avatar/${uuid}/${size}`;
+      }
+    } else if (
+      player.isUnoriginal ||
+      url.startsWith('data:') ||
+      (!url.includes('mc-heads.net/avatar/') && !url.includes('crafatar.com') && !url.includes('minotar.net'))
+    ) {
+      resultUrl = url;
+    }
+  }
+
+  if (resultUrl) {
+    if (player.skinTimestamp && !resultUrl.startsWith('data:')) {
+      const separator = resultUrl.includes('?') ? '&' : '?';
+      return `${resultUrl}${separator}t=${player.skinTimestamp}`;
+    }
+    return resultUrl;
+  }
+
+  // 2. If no custom skin is set, and the player is a premium user with a UUID, fetch from high-quality mc-heads.net
   if (!player.isUnoriginal && player.uuid) {
     const isFallbackUuid = player.uuid === STEVE_UUID || player.uuid === ALEX_UUID;
     const identifier = isFallbackUuid ? player.username : player.uuid.replace(/-/g, '');
@@ -112,23 +151,8 @@ export const getCorrectAvatar = (player: any, size = 64): string => {
     return baseUrl;
   }
 
-  const url = player.customAvatarUrl;
-  let resultUrl = '';
-  if (url) {
-    if (url.includes('crafatar.com/avatars/')) {
-      const parts = url.split('/avatars/');
-      if (parts.length > 1) {
-        const uuid = parts[1].split('?')[0];
-        resultUrl = `https://mc-heads.net/avatar/${uuid}/${size}`;
-      }
-    } else if (player.isUnoriginal || url.startsWith('data:') || (!url.includes('crafatar.com') && !url.includes('minotar.net'))) {
-      resultUrl = url;
-    }
-  }
-  if (!resultUrl) {
-    resultUrl = getMinecraftAvatar(player.username, size);
-  }
-  // Add browser cache buster if skinTimestamp exists
+  // 3. Absolute fallback is username-based avatar rendering
+  resultUrl = getMinecraftAvatar(player.username, size);
   if (player.skinTimestamp && !resultUrl.startsWith('data:')) {
     const separator = resultUrl.includes('?') ? '&' : '?';
     return `${resultUrl}${separator}t=${player.skinTimestamp}`;
@@ -169,7 +193,7 @@ export const fetchMinecraftProfile = async (username: string): Promise<MojangPro
     if (json.success && json.data?.player) {
       const player = json.data.player;
       return {
-        username: player.username,
+        username: cleanUsername,
         uuid: player.id,
         avatarUrl: `https://mc-heads.net/avatar/${player.id}/64`,
         bodyUrl: `https://mc-heads.net/body/${player.id}/200`,

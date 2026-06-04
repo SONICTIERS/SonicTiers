@@ -125,6 +125,8 @@ export default function AdminDashboard({
   const calculateOverallPoints = (tiersRecord: Record<string, RankTier>): number => {
     const modes = Object.keys(tiersRecord);
     if (modes.length === 0) return 50;
+    const allLT5 = modes.every(m => tiersRecord[m] === 'LT5');
+    if (allLT5) return 0;
     const sum = modes.reduce((acc, currentMode) => {
       const tier = tiersRecord[currentMode];
       return acc + (TIER_POINTS_MAPPING[tier] ?? 50);
@@ -134,8 +136,12 @@ export default function AdminDashboard({
 
   const generateCustomModeStats = (tiersRecord: Record<string, RankTier>): Record<string, any> => {
     const stats: Record<string, any> = {};
+    const allLT5 = Object.values(tiersRecord).every(t => t === 'LT5');
     Object.entries(tiersRecord).forEach(([mode, tier]) => {
-      const points = TIER_POINTS_MAPPING[tier];
+      let points = TIER_POINTS_MAPPING[tier];
+      if (allLT5) {
+        points = 0;
+      }
       const wins = Math.floor(points * 2.5 + Math.random() * 15);
       const losses = Math.floor((100 - points) * 1.5 + Math.random() * 10);
       const total = wins + losses || 1;
@@ -331,11 +337,16 @@ export default function AdminDashboard({
       setEditSkinFetchStatus('idle');
       return;
     }
+    // Only auto-fetch if the username has actually changed from the original player username
+    if (editingPlayer && clean.toLowerCase() === editingPlayer.username.toLowerCase()) {
+      setEditSkinFetchStatus('idle');
+      return;
+    }
     const timer = setTimeout(() => {
       autoFetchEditPlayerSkin(clean);
     }, 730);
     return () => clearTimeout(timer);
-  }, [editUsername, editIsUnoriginal]);
+  }, [editUsername, editIsUnoriginal, editingPlayer]);
 
   const handleOpenAddForm = () => {
     setShowAddForm(true);

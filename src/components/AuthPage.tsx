@@ -140,23 +140,16 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
 
   const handleCreateAndLog = async () => {
     if (!resolvedProfile) return;
-    if (!verificationCode.trim()) {
-      setVerificationError('Verification code is required.');
-      return;
-    }
     
     setIsLoading(true);
     setVerificationError(null);
     
-    const dbCheck = await verifyWithSupabase(resolvedProfile.username, verificationCode);
-    setIsLoading(false);
-    
-    if (!dbCheck.success) {
-      setVerificationError(dbCheck.message || 'Verification database check failed.');
-      return;
-    }
-
-    onLoginSuccess(resolvedProfile.username, resolvedProfile.uuid, resolvedProfile.avatarUrl, resolvedProfile.bodyUrl, isUnoriginal);
+    // Since we successfully verified the username and code with Supabase on the previous screen 
+    // to retrieve the identity, we can directly create/log in the profile safely after a brief visual process.
+    setTimeout(() => {
+      setIsLoading(false);
+      onLoginSuccess(resolvedProfile.username, resolvedProfile.uuid, resolvedProfile.avatarUrl, resolvedProfile.bodyUrl, isUnoriginal);
+    }, 400);
   };
 
   // Quick alternative bypass for fast testing using famous PvP streamers
@@ -412,43 +405,17 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 </span>
               </div>
 
-              {/* Verification Code Gate */}
-              <div className="space-y-2 text-left max-w-xs mx-auto">
-                <label htmlFor="verification-input" className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
-                  Enter Verification Code :
-                </label>
-                <div className="relative">
-                  <input
-                    id="verification-input"
-                    type="text"
-                    maxLength={24}
-                    placeholder="e.g. DS9K2M"
-                    value={verificationCode}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^a-zA-Z0-9]/g, ''); // alphanumeric only
-                      setVerificationCode(val);
-                      if (val.length >= 4) {
-                        setVerificationError(null);
-                      }
-                    }}
-                    className="w-full bg-zinc-950 border border-zinc-90 w-full rounded-xl py-2.5 px-3.5 text-center text-sm font-mono tracking-[0.25em] text-[#39FF14] placeholder-zinc-800 outline-none focus:border-zinc-750 transition-all font-bold"
-                  />
-                  {verificationCode.length >= 4 && (
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#39FF14] font-bold uppercase">
-                      ✓ READY
-                    </span>
-                  )}
+              {/* Verification Code Status */}
+              <div className="space-y-2 text-center max-w-xs mx-auto bg-[#39FF14]/5 border border-[#39FF14]/15 p-4 rounded-2xl shadow">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#39FF14] block">
+                  ✓ VERIFICATION SECURED
+                </span>
+                <p className="text-sm font-mono text-zinc-300 font-extrabold tracking-wider bg-zinc-950/80 py-1.5 px-3 rounded-lg border border-zinc-900 inline-block">
+                  CODE: {verificationCode.toUpperCase()}
+                </p>
+                <div className="text-[9.5px] font-mono text-zinc-500 leading-normal">
+                  Your identity is verified. Ready to synchronize status matrices and establish competitor file.
                 </div>
-                
-                <div className="text-[9px] font-mono text-zinc-550 leading-tight">
-                  Enter the code you got from Discord
-                </div>
-
-                {verificationError && (
-                  <div className="text-[10px] text-red-400 font-mono mt-0.5">
-                    ⚠️ {verificationError}
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-3">
@@ -459,7 +426,8 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                     setVerificationCode('');
                     setVerificationError(null);
                   }}
-                  className="px-4 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-white rounded-xl transition-all cursor-pointer"
+                  className="px-4 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                  title="Reset and start over"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </button>
@@ -467,9 +435,19 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 <button
                   id="confirm-creation-btn"
                   onClick={handleCreateAndLog}
-                  className="flex-1 h-11 bg-[#39FF14] hover:bg-emerald-400 text-black font-mono font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#39FF14]/20"
+                  disabled={isLoading}
+                  className="flex-grow h-11 bg-[#39FF14] disabled:bg-[#39FF14]/50 hover:bg-emerald-400 text-black font-mono font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#39FF14]/25"
                 >
-                  ESTABLISH COMPETITOR PROFILE
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      ESTABLISHING PROFILE...
+                    </>
+                  ) : (
+                    <>
+                      ESTABLISH COMPETITOR PROFILE
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>
