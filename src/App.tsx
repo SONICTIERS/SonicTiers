@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { GameMode, MinecraftPlayer, RankTier, AdminSettings, MatchHistoryItem } from './types';
 import { MOCK_PLAYERS, RANK_TIERS, getRankByPoints, GAME_MODES } from './mockData';
 import { getMinecraftAvatar, getCorrectAvatar } from './utils/minecraft';
+import {
+  getSupabase,
+  fetchSupabasePlayers,
+  saveSupabasePlayer,
+  seedSupabasePlayers,
+  deleteSupabasePlayer,
+  fetchSupabaseSettings,
+  saveSupabaseSettings
+} from './utils/supabase';
 
 // View components
 import LandingPage from './components/LandingPage';
@@ -82,42 +91,142 @@ export default function App() {
   const [adminPasscode, setAdminPasscode] = useState('');
   const [adminGateError, setAdminGateError] = useState('');
 
-  // --- PERSISTENCE INITS ---
-  useEffect(() => {
-    // 1. Load players list from localStorage or load seed MOCK_PLAYERS
-    const localPlayers = localStorage.getItem('sonictiers_players');
-    let dbPlayers: MinecraftPlayer[] = [];
-    
-    if (localPlayers) {
-      dbPlayers = JSON.parse(localPlayers);
-    } else {
-      dbPlayers = MOCK_PLAYERS;
-      localStorage.setItem('sonictiers_players', JSON.stringify(MOCK_PLAYERS));
-    }
-    setPlayers(dbPlayers);
+  // Supabase sync states
+  const [dbSyncStatus, setDbSyncStatus] = useState<'not_configured' | 'connecting' | 'synced' | 'table_missing' | 'error'>('connecting');
+  const [dbErrorMessage, setDbErrorMessage] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
-    // 2. Load active logged user
+  // --- PERSISTENCE INITS & SYNC ---
+  const loadDatabaseData = async () => {
+    setDbSyncStatus('connecting');
+    const supabase = getSupabase();
+    const mockUuids = ['bf3000b2-3837-47ab-b631-f9f257a41c2c', '09c6253c-f4b6-4b21-9d8e-171b3e6afbc0', '34293f06-b333-47a3-82a1-cf8d2b963bfd', 'b87669bb-ad41-4765-a140-5427c3feefced', 'bca9e66c-59bf-4bad-98d1-d250fcf422b4', '8dfb4c73-45ab-4357-9d7a-cfb3aef6e881', '7f9b33be-db41-4775-9e67-d8dc630bc39a', 'ec70bc58-dbca-487b-8573-31177ba1c170', 'bf9efca2-6323-45bc-8a71-6a2c3a5160fa', '8667ba71-b85a-4004-af54-457a9734eed7'];
+    const localUserJson = localStorage.getItem('sonictiers_current_user');
+    const currentUserUuid = currentUser?.uuid || (localUserJson ? JSON.parse(localUserJson).uuid : null);
+    
+    // 1. If Supabase is not configured yet, fallback to localStorage
+    if (!supabase) {
+      setDbSyncStatus('not_configured');
+      const localPlayers = localStorage.getItem('sonictiers_players');
+      let dbPlayers: MinecraftPlayer[] = [];
+      if (localPlayers) {
+        dbPlayers = JSON.parse(localPlayers);
+      } else {
+        dbPlayers = [];
+        localStorage.setItem('sonictiers_players', JSON.stringify([]));
+      }
+      
+      // Filter out any unauthenticated mock players and only load real registered credentials
+      dbPlayers = dbPlayers.filter(p => !mockUuids.includes(p.uuid) || p.uuid === currentUserUuid);
+      
+      setPlayers(dbPlayers);
+      syncCurrentUserState(dbPlayers);
+      return;
+    }
+
+    // 2. Fetch from Supabase
+    setIsSyncing(true);
+    const res = await fetchSupabasePlayers();
+    setIsSyncing(false);
+
+    if (res.success && res.players) {
+      setDbSyncStatus('synced');
+      let finalPlayers = res.players;
+      
+      // Filter out any unauthenticated mock players (Dante, Alex, etc.) to obey the user's instructions
+      finalPlayers = finalPlayers.filter(p => !mockUuids.includes(p.uuid) || p.uuid === currentUserUuid);
+
+      setPlayers(finalPlayers);
+      localStorage.setItem('sonictiers_players', JSON.stringify(finalPlayers));
+      syncCurrentUserState(finalPlayers);
+      
+      // Fetch global custom settings if configured
+      const cloudSettings = await fetchSupabaseSettings();
+      if (cloudSettings) {
+        setSettings(cloudSettings);
+      }
+    } else {
+      if (res.tableMissing) {
+        setDbSyncStatus('table_missing');
+      } else {
+        setDbSyncStatus('error');
+        setDbErrorMessage(res.error || 'Failed to establish connection to Supabase.');
+      }
+      // Fallback to localStorage on table missing or error so the site is functional
+      const localPlayers = localStorage.getItem('sonictiers_players');
+      let dbPlayers: MinecraftPlayer[] = [];
+      if (localPlayers) {
+        dbPlayers = JSON.parse(localPlayers);
+      } else {
+        dbPlayers = [];
+        localStorage.setItem('sonictiers_players', JSON.stringify([]));
+      }
+      
+      dbPlayers = dbPlayers.filter(p => !mockUuids.includes(p.uuid) || p.uuid === currentUserUuid);
+      setPlayers(dbPlayers);
+      syncCurrentUserState(dbPlayers);
+    }
+  };
+
+  const syncCurrentUserState = (allPlayersList: MinecraftPlayer[]) => {
     const localUser = localStorage.getItem('sonictiers_current_user');
     if (localUser) {
       const parsedUser = JSON.parse(localUser);
-      // reload live data of user from live DB to sync scores
-      const matched = dbPlayers.find(p => p.username.toLowerCase() === parsedUser.username.toLowerCase());
+      const matched = allPlayersList.find(p => p.username.toLowerCase() === parsedUser.username.toLowerCase());
       if (matched) {
         setCurrentUser(matched);
       } else {
         setCurrentUser(parsedUser);
       }
     }
+  };
 
-    // 3. Load active console session authorization status
+  // Run on startup
+  useEffect(() => {
+    loadDatabaseData();
+
+    // Load active console session authorization status
     const sessionAdmin = localStorage.getItem('sonictiers_session_admin') === 'true';
     setIsSessionAdmin(sessionAdmin);
   }, []);
 
-  // Sync state helpers to persistent Storage
-  const updatePlayersDB = (nextPlayers: MinecraftPlayer[]) => {
+  // Periodic background check/polling every 40 seconds to bring hot new scoreboard records from friends!
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const supabase = getSupabase();
+      if (supabase && dbSyncStatus === 'synced') {
+        fetchSupabasePlayers().then(res => {
+          if (res.success && res.players) {
+            setPlayers(res.players);
+            localStorage.setItem('sonictiers_players', JSON.stringify(res.players));
+            syncCurrentUserState(res.players);
+          }
+        });
+      }
+    }, 40000);
+    return () => clearInterval(interval);
+  }, [dbSyncStatus]);
+
+  // Sync state helpers to persistent Storage and Supabase in background
+  const updatePlayersDB = async (nextPlayers: MinecraftPlayer[], singleChangedPlayer?: MinecraftPlayer, deletedIdOrUsername?: string) => {
     setPlayers(nextPlayers);
     localStorage.setItem('sonictiers_players', JSON.stringify(nextPlayers));
+
+    const supabase = getSupabase();
+    if (supabase && dbSyncStatus === 'synced') {
+      try {
+        if (deletedIdOrUsername) {
+          await deleteSupabasePlayer(deletedIdOrUsername);
+        } else if (singleChangedPlayer) {
+          await saveSupabasePlayer(singleChangedPlayer);
+        } else {
+          // Fallback or bulk update
+          await seedSupabasePlayers(nextPlayers);
+        }
+      } catch (err) {
+        console.error("Supabase action update error:", err);
+      }
+    }
   };
 
   // --- ACTIONS ---
@@ -131,8 +240,11 @@ export default function App() {
       return;
     }
 
-    // Check if player already exists in the Database
-    let matched = players.find(p => p.username.toLowerCase() === username.toLowerCase());
+    // Check if player already exists in the Database (state or localStorage fallback)
+    const localPlayersStr = localStorage.getItem('sonictiers_players');
+    const allPlayersList = localPlayersStr ? JSON.parse(localPlayersStr) as MinecraftPlayer[] : players;
+    
+    let matched = allPlayersList.find(p => p.username.toLowerCase() === username.toLowerCase());
     
     if (!matched) {
       // Bootstrap clean competitor account
@@ -169,8 +281,8 @@ export default function App() {
         isUnoriginal: isUnoriginal || uuid.startsWith('offline-')
       };
 
-      const updated = [matched, ...players];
-      updatePlayersDB(updated);
+      const updated = [matched, ...players.filter(p => p.username.toLowerCase() !== username.toLowerCase())];
+      updatePlayersDB(updated, matched);
     } else {
       // If player already exists, sync their profile skin URLs as well
       let changed = false;
@@ -182,11 +294,21 @@ export default function App() {
         matched.customBodyUrl = customBodyUrl;
         changed = true;
       }
+      if (uuid && matched.uuid !== uuid) {
+        matched.uuid = uuid;
+        matched.id = uuid;
+        changed = true;
+      }
       if (changed) {
         matched.skinTimestamp = Date.now();
-        const updated = players.map(p => p.username.toLowerCase() === username.toLowerCase() ? matched! : p);
-        updatePlayersDB(updated);
       }
+      
+      let updated = players.map(p => p.username.toLowerCase() === username.toLowerCase() ? matched! : p);
+      const existsInState = players.some(p => p.username.toLowerCase() === username.toLowerCase());
+      if (!existsInState) {
+        updated = [matched, ...updated];
+      }
+      updatePlayersDB(updated, matched);
     }
 
     if (matched && matched.isBanned) {
@@ -205,8 +327,12 @@ export default function App() {
           matched.banStartDate = undefined;
           matched.banExpiresAt = undefined;
           
-          const updated = players.map(p => p.username.toLowerCase() === username.toLowerCase() ? matched! : p);
-          updatePlayersDB(updated);
+          let updated = players.map(p => p.username.toLowerCase() === username.toLowerCase() ? matched! : p);
+          const existsInState = players.some(p => p.username.toLowerCase() === username.toLowerCase());
+          if (!existsInState) {
+            updated = [matched, ...updated];
+          }
+          updatePlayersDB(updated, matched);
         }
       } else {
         alert("ACCESS DENIED: Your account is suspended permanently.");
@@ -240,25 +366,40 @@ export default function App() {
     const userInDb = players.find(p => p.username === currentUser.username);
     if (!userInDb) return;
 
-    // Under "just for fun" requirements, we do NOT modify the user's competitive points, levels, or rank ratings.
-    const nextPoints = userInDb.stats[mode].points;
-    const nextRank = userInDb.stats[mode].rank;
+    // Dynamic points award based on the test score (10 to 100)
+    const nextPoints = score;
+    const nextRank = getRankByPoints(nextPoints);
 
-    const nextLvExp = userInDb.xpPoints;
-    const nextLevel = userInDb.xpLevel;
+    // Dynamic XP progression: gain XP based on score
+    const xpGained = score * 5;
+    let nextLvExp = userInDb.xpPoints + xpGained;
+    let nextLevel = userInDb.xpLevel;
+    // Simple level progression: each level needs level * 500 XP
+    while (nextLvExp >= nextLevel * 500) {
+      nextLvExp -= nextLevel * 500;
+      nextLevel += 1;
+    }
 
-    // Calculate aggregated mode division modifiers (only update personal bests for CPS/accuracy)
     const activeStat = userInDb.stats[mode];
+    const newWins = score >= 50 ? (activeStat.wins || 0) + 1 : (activeStat.wins || 0);
+    const newLosses = score < 50 ? (activeStat.losses || 0) + 1 : (activeStat.losses || 0);
+    const newTotal = newWins + newLosses || 1;
+    const newWinRate = parseFloat(((newWins / newTotal) * 100).toFixed(1));
+    const newKdRatio = parseFloat(((score / 35) + 0.3 + Math.random() * 0.2).toFixed(2));
 
     const finalModeStats = {
       ...activeStat,
-      points: activeStat.points, // Points frozen
-      rank: activeStat.rank,     // Ranks frozen
+      points: nextPoints,
+      rank: nextRank,
+      wins: newWins,
+      losses: newLosses,
+      winRate: newWinRate,
+      kdRatio: newKdRatio,
       accuracy: testStats.accuracy !== undefined ? Math.max(activeStat.accuracy || 0, testStats.accuracy) : activeStat.accuracy || 70,
       cps: testStats.cps !== undefined ? Math.max(activeStat.cps || 0, testStats.cps) : activeStat.cps || 8.5
     };
 
-    // Update achievements unlocked based on progress (still allow click/CPS achievement for fun)
+    // Update achievements unlocked based on progress
     const activeAchievements = [...userInDb.achievements];
 
     if (testStats.cps && testStats.cps >= 12 && !activeAchievements.some(a => a.id === 'ach_cps_god')) {
@@ -271,32 +412,88 @@ export default function App() {
       });
     }
 
-    // Assemble final user profile
+    if (nextRank === 'HT1' && !activeAchievements.some(a => a.id === 'ach_ht1_god')) {
+      activeAchievements.push({
+        id: 'ach_ht1_god',
+        title: 'High Tier 1 global standings',
+        description: 'Ascend to High Tier 1 globals!',
+        iconName: 'crown',
+        unlockedAt: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    // Assemble final user profile stats
     const finalStats = {
       ...userInDb.stats,
       [mode]: finalModeStats
     };
+
+    // Recalculate overallPoints as the average of all game modes
+    const allModes = Object.keys(finalStats) as GameMode[];
+    const totalPoints = allModes.reduce((sum, m) => sum + (finalStats[m]?.points || 0), 0);
+    const overallPoints = Math.round(totalPoints / allModes.length);
+    const overallRank = getRankByPoints(overallPoints);
+
+    // Calculate overall win rate
+    const totalWins = allModes.reduce((sum, m) => sum + (finalStats[m]?.wins || 0), 0);
+    const totalLosses = allModes.reduce((sum, m) => sum + (finalStats[m]?.losses || 0), 0);
+    const totalGames = totalWins + totalLosses || 1;
+    const overallWinRate = parseFloat(((totalWins / totalGames) * 100).toFixed(1));
+
+    // Inject a dynamic Match History entry for extra realism and history log!
+    const matchId = `test-${Date.now()}`;
+    const dateToday = new Date().toISOString().split('T')[0];
+    const newMatch: MatchHistoryItem = {
+      id: matchId,
+      opponent: 'AI Evaluator Bot',
+      opponentUuid: 'steve',
+      result: score >= 50 ? 'WIN' : 'LOSS',
+      mode,
+      pointsChange: score - (activeStat.points || 5),
+      date: dateToday
+    };
+    const updatedHistory = [newMatch, ...userInDb.matchHistory].slice(0, 15);
 
     const updatedUser: MinecraftPlayer = {
       ...userInDb,
       xpLevel: nextLevel,
       xpPoints: nextLvExp,
       stats: finalStats as Record<GameMode, any>,
-      overallPoints: userInDb.overallPoints,
-      overallRank: userInDb.overallRank,
-      achievements: activeAchievements
+      overallPoints,
+      overallRank,
+      winRate: overallWinRate,
+      achievements: activeAchievements,
+      matchHistory: updatedHistory,
+      joinedDate: userInDb.joinedDate || dateToday
     };
 
-    // Overwrite database profile
+    // Detect rank changes for promotion trigger animations
+    const RANK_ORDER: RankTier[] = ['LT5', 'HT5', 'LT4', 'HT4', 'LT3', 'HT3', 'LT2', 'HT2', 'LT1', 'HT1'];
+    const getRankPriority = (r: RankTier): number => RANK_ORDER.indexOf(r);
+
+    if (overallRank !== userInDb.overallRank && getRankPriority(overallRank) > getRankPriority(userInDb.overallRank)) {
+      playPromotionBell();
+      setPromotionCelebration({
+        prevRank: userInDb.overallRank,
+        nextRank: overallRank,
+        points: overallPoints
+      });
+    }
+
+    // Overwrite database profile & trigger persistent sync
     const nextPlayers = players.map(p => p.username === currentUser.username ? updatedUser : p);
-    updatePlayersDB(nextPlayers);
+    updatePlayersDB(nextPlayers, updatedUser);
     setCurrentUser(updatedUser);
     localStorage.setItem('sonictiers_current_user', JSON.stringify(updatedUser));
   };
 
   // Admin controls
-  const handleAdminUpdateSettings = (nextConfig: AdminSettings) => {
+  const handleAdminUpdateSettings = async (nextConfig: AdminSettings) => {
     setSettings(nextConfig);
+    const supabase = getSupabase();
+    if (supabase && dbSyncStatus === 'synced') {
+      await saveSupabaseSettings(nextConfig);
+    }
   };
 
   const handleAdminModifyBlockStatus = (username: string, nextBanned: boolean, durationDays?: number) => {
@@ -331,7 +528,8 @@ export default function App() {
       }
       return p;
     });
-    updatePlayersDB(updated);
+    const updatedUser = updated.find(p => p.username === username);
+    updatePlayersDB(updated, updatedUser);
 
     if (shouldLogoutUser && currentUser && currentUser.username.toLowerCase() === username.toLowerCase()) {
       handleLogout();
@@ -359,7 +557,8 @@ export default function App() {
       }
       return p;
     });
-    updatePlayersDB(updated);
+    const updatedUser = updated.find(p => p.username === username);
+    updatePlayersDB(updated, updatedUser);
   };
 
   const handleAdminToggleAdminStatus = (username: string, nextAdmin: boolean) => {
@@ -369,7 +568,8 @@ export default function App() {
       }
       return p;
     });
-    updatePlayersDB(updated);
+    const updatedUser = updated.find(p => p.username === username);
+    updatePlayersDB(updated, updatedUser);
 
     if (currentUser && currentUser.username === username) {
       const nextUser = { ...currentUser, isAdmin: nextAdmin };
@@ -379,12 +579,12 @@ export default function App() {
   };
 
   const handleAdminAddPlayer = (newPlayer: MinecraftPlayer) => {
-    updatePlayersDB([...players, newPlayer]);
+    updatePlayersDB([...players, newPlayer], newPlayer);
   };
 
   const handleAdminUpdatePlayer = (oldUsername: string, updatedPlayer: MinecraftPlayer) => {
     const updated = players.map(p => p.username === oldUsername ? updatedPlayer : p);
-    updatePlayersDB(updated);
+    updatePlayersDB(updated, updatedPlayer);
 
     if (currentUser && currentUser.username === oldUsername) {
       setCurrentUser(updatedPlayer);
@@ -397,11 +597,28 @@ export default function App() {
   };
 
   const handleAdminDeletePlayer = (username: string) => {
+    const playerToDelete = players.find(p => p.username === username);
     const updated = players.filter(p => p.username !== username);
-    updatePlayersDB(updated);
+    updatePlayersDB(updated, undefined, playerToDelete?.id || playerToDelete?.uuid || username);
 
     if (currentUser && currentUser.username === username) {
       handleLogout();
+    }
+  };
+
+  const handlePushToCloud = async () => {
+    setIsSyncing(true);
+    try {
+      const resSeed = await seedSupabasePlayers(players);
+      if (resSeed.success) {
+        alert("UPLOAD SUCCESSFUL: All local player profiles and stats have been successfully synchronized to Supabase!");
+      } else {
+        alert(`UPLOAD FAILED: Supabase rejected the payload.\n\nReason: ${resSeed.error || "Unknown constraint/policy block"}\n\n💡 Troubleshooting advice:\n1. If you just created the table, make sure to disable Row-Level Security (RLS) in the Supabase Table Editor or execute the disabling SQL command.\n2. Verify your API credentials exist inside AI Studio Secrets.`);
+      }
+    } catch (err: any) {
+      alert(`UPLOAD ERROR: ${err.message || "Unknown network error."}`);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -768,6 +985,11 @@ export default function App() {
                             onAddPlayer={handleAdminAddPlayer}
                             onUpdatePlayer={handleAdminUpdatePlayer}
                             onDeletePlayer={handleAdminDeletePlayer}
+                            dbSyncStatus={dbSyncStatus}
+                            dbErrorMessage={dbErrorMessage}
+                            isSyncing={isSyncing}
+                            onRefreshDB={loadDatabaseData}
+                            onPushToCloud={handlePushToCloud}
                           />
                         </div>
                       ) : (

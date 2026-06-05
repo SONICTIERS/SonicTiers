@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "A competitive Minecraft player with ranks and stats",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "Minecraft in-game name" },
+        "uuid": { "type": "string", "description": "Minecraft Mojang UUID" },
+        "id": { "type": "string", "description": "Unique identifier (matches uuid or username)" },
+        "xpLevel": { "type": "integer" },
+        "xpPoints": { "type": "integer" },
+        "overallRank": { "type": "string" },
+        "overallPoints": { "type": "number" },
+        "winRate": { "type": "number" },
+        "joinedDate": { "type": "string" },
+        "isBanned": { "type": "boolean" },
+        "banDurationDays": { "type": "integer" },
+        "banStartDate": { "type": "string" },
+        "banExpiresAt": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "isTester": { "type": "boolean" },
+        "customAvatarUrl": { "type": "string" },
+        "customBodyUrl": { "type": "string" },
+        "isUnoriginal": { "type": "boolean" },
+        "skinTimestamp": { "type": "integer" }
+      },
+      "required": ["username", "overallRank", "overallPoints"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "System configuration settings for the site",
+      "type": "object",
+      "properties": {
+        "testLengthSeconds": { "type": "integer" },
+        "aimTargetCount": { "type": "integer" },
+        "autoPromotion": { "type": "boolean" }
+      },
+      "required": ["testLengthSeconds", "aimTargetCount"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Collection of all competitor players"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "System global settings"
+    }
+  }
+}

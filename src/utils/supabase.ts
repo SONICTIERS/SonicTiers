@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { MinecraftPlayer, AdminSettings } from '../types';
 
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -226,5 +227,245 @@ export async function verifyWithSupabase(username: string, inputCode: string): P
       success: false,
       message: `Supabase integration exception: ${err.message || 'Unknown network error'}`
     };
+  }
+}
+
+/**
+ * Attempt to load all players from Supabase table 'sonictiers_players'.
+ * If it succeeds, return the list of players. If it fails because the relation/table
+ * doesn't exist, we return a custom structure indicating the exact issue so we can
+ * prompt the user on how to set it up!
+ */
+export async function fetchSupabasePlayers(): Promise<{
+  success: boolean;
+  players?: MinecraftPlayer[];
+  error?: string;
+  tableMissing?: boolean;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { success: false, error: 'Supabase URL or Anon key is missing.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('sonictiers_players')
+      .select('*')
+      .order('overallPoints', { ascending: false });
+
+    if (error) {
+      const isRelationMissing = error.message.includes('relation') || error.message.includes('does not exist') || error.code === '42P01';
+      return {
+        success: false,
+        error: error.message,
+        tableMissing: isRelationMissing
+      };
+    }
+
+    // Map rows back to complete MinecraftPlayer object (ensuring correct capitalizations/types)
+    const converted: MinecraftPlayer[] = (data || []).map((row) => {
+      return {
+        username: row.username,
+        uuid: row.uuid,
+        id: row.id,
+        xpLevel: Number(row.xpLevel ?? row.xp_level ?? 1),
+        xpPoints: Number(row.xpPoints ?? row.xp_points ?? 100),
+        overallRank: row.overallRank ?? row.overall_rank ?? 'LT5',
+        overallPoints: Number(row.overallPoints ?? row.overall_points ?? 0),
+        winRate: Number(row.winRate ?? row.win_rate ?? 0),
+        joinedDate: row.joinedDate ?? row.joined_date ?? new Date().toISOString().split('T')[0],
+        isBanned: !!row.isBanned,
+        banDurationDays: row.banDurationDays !== undefined && row.banDurationDays !== null ? Number(row.banDurationDays) : undefined,
+        banStartDate: row.banStartDate || undefined,
+        banExpiresAt: row.banExpiresAt || undefined,
+        isAdmin: !!row.isAdmin,
+        isTester: !!row.isTester,
+        customAvatarUrl: row.customAvatarUrl || undefined,
+        customBodyUrl: row.customBodyUrl || undefined,
+        isUnoriginal: !!row.isUnoriginal,
+        skinTimestamp: row.skinTimestamp ? Number(row.skinTimestamp) : undefined,
+        matchHistory: Array.isArray(row.matchHistory) ? row.matchHistory : [],
+        achievements: Array.isArray(row.achievements) ? row.achievements : [],
+        stats: typeof row.stats === 'object' && row.stats ? row.stats : {},
+      };
+    });
+
+    return { success: true, players: converted };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown network error' };
+  }
+}
+
+/**
+ * Saves or updates a single player in Supabase 'sonictiers_players' table.
+ */
+export async function saveSupabasePlayer(player: MinecraftPlayer): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) return { success: false, error: 'Supabase client is not configured.' };
+
+  try {
+    const payload = {
+      id: player.id || player.uuid || player.username,
+      username: player.username,
+      uuid: player.uuid,
+      xpLevel: player.xpLevel,
+      xpPoints: player.xpPoints,
+      overallRank: player.overallRank,
+      overallPoints: player.overallPoints,
+      winRate: player.winRate,
+      joinedDate: player.joinedDate,
+      isBanned: !!player.isBanned,
+      banDurationDays: player.banDurationDays || null,
+      banStartDate: player.banStartDate || null,
+      banExpiresAt: player.banExpiresAt || null,
+      isAdmin: !!player.isAdmin,
+      isTester: !!player.isTester,
+      customAvatarUrl: player.customAvatarUrl || null,
+      customBodyUrl: player.customBodyUrl || null,
+      isUnoriginal: !!player.isUnoriginal,
+      skinTimestamp: player.skinTimestamp || null,
+      matchHistory: player.matchHistory || [],
+      achievements: player.achievements || [],
+      stats: player.stats || {},
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from('sonictiers_players')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network exception' };
+  }
+}
+
+/**
+ * Bulk upserts a list of players to Supabase 'sonictiers_players' (ideal for bulk initial seed).
+ */
+export async function seedSupabasePlayers(players: MinecraftPlayer[]): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) return { success: false, error: 'Supabase client is not configured.' };
+
+  try {
+    const payloads = players.map(player => ({
+      id: player.id || player.uuid || player.username,
+      username: player.username,
+      uuid: player.uuid,
+      xpLevel: player.xpLevel,
+      xpPoints: player.xpPoints,
+      overallRank: player.overallRank,
+      overallPoints: player.overallPoints,
+      winRate: player.winRate,
+      joinedDate: player.joinedDate,
+      isBanned: !!player.isBanned,
+      banDurationDays: player.banDurationDays || null,
+      banStartDate: player.banStartDate || null,
+      banExpiresAt: player.banExpiresAt || null,
+      isAdmin: !!player.isAdmin,
+      isTester: !!player.isTester,
+      customAvatarUrl: player.customAvatarUrl || null,
+      customBodyUrl: player.customBodyUrl || null,
+      isUnoriginal: !!player.isUnoriginal,
+      skinTimestamp: player.skinTimestamp || null,
+      matchHistory: player.matchHistory || [],
+      achievements: player.achievements || [],
+      stats: player.stats || {},
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabase
+      .from('sonictiers_players')
+      .upsert(payloads, { onConflict: 'id' });
+
+    if (error) {
+      console.error("Supabase bulk-insert error:", error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error("Supabase seed exception:", err);
+    return { success: false, error: err.message || 'Unknown network error' };
+  }
+}
+
+/**
+ * Deletes a player from Supabase.
+ */
+export async function deleteSupabasePlayer(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('sonictiers_players')
+      .delete()
+      .eq('id', id);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch Admin Settings from Supabase 'sonictiers_settings'
+ */
+export async function fetchSupabaseSettings(): Promise<AdminSettings | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('sonictiers_settings')
+      .select('*')
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const row = data[0];
+    return {
+      testLengthSeconds: row.testLengthSeconds ?? 5,
+      aimTargetCount: row.aimTargetCount ?? 15,
+      banWords: Array.isArray(row.banWords) ? row.banWords : ['cheat', 'toxic', 'hax'],
+      autoPromotion: row.autoPromotion ?? true
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save Admin Settings to Supabase 'sonictiers_settings'
+ */
+export async function saveSupabaseSettings(settings: AdminSettings): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  try {
+    const payload = {
+      id: 'global_settings',
+      testLengthSeconds: settings.testLengthSeconds,
+      aimTargetCount: settings.aimTargetCount,
+      banWords: settings.banWords,
+      autoPromotion: settings.autoPromotion,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from('sonictiers_settings')
+      .upsert(payload, { onConflict: 'id' });
+
+    return !error;
+  } catch {
+    return false;
   }
 }

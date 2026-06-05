@@ -48,6 +48,11 @@ interface AdminDashboardProps {
   onAddPlayer?: (newPlayer: MinecraftPlayer) => void;
   onUpdatePlayer?: (oldUsername: string, updatedPlayer: MinecraftPlayer) => void;
   onDeletePlayer?: (username: string) => void;
+  dbSyncStatus?: 'not_configured' | 'connecting' | 'synced' | 'table_missing' | 'error';
+  dbErrorMessage?: string;
+  isSyncing?: boolean;
+  onRefreshDB?: () => void;
+  onPushToCloud?: () => Promise<void>;
 }
 
 export default function AdminDashboard({
@@ -59,7 +64,12 @@ export default function AdminDashboard({
   onToggleAdminStatus,
   onAddPlayer,
   onUpdatePlayer,
-  onDeletePlayer
+  onDeletePlayer,
+  dbSyncStatus = 'not_configured',
+  dbErrorMessage = '',
+  isSyncing = false,
+  onRefreshDB,
+  onPushToCloud
 }: AdminDashboardProps) {
    const [activeTab, setActiveTab] = useState<'users' | 'analytics'>('users');
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
@@ -588,6 +598,188 @@ export default function AdminDashboard({
           </button>
         </div>
       </div>
+
+      {/* SUPABASE STATUS WIDGET */}
+      <div className="mb-6 p-4 md:p-5 rounded-2xl border bg-[#090b11]/80 backdrop-blur-md border-zinc-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono tracking-widest uppercase font-bold text-zinc-500">
+              Supabase Connection Status
+            </span>
+            {isSyncing && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#39FF14] animate-ping" />
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2.5">
+            {dbSyncStatus === 'synced' && (
+              <>
+                <div className="w-2.5 h-2.5 rounded-full bg-[#39FF14] shadow-[0_0_8px_#39FF14]" />
+                <span className="text-xs font-mono font-bold text-zinc-200 uppercase tracking-wider">
+                  SUPABASE SYNCHRONIZED
+                </span>
+                <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850">
+                  Supabase Client
+                </span>
+              </>
+            )}
+
+            {dbSyncStatus === 'connecting' && (
+              <>
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs font-mono font-bold text-zinc-300 uppercase">
+                  Connecting to Supabase...
+                </span>
+              </>
+            )}
+
+            {dbSyncStatus === 'not_configured' && (
+              <>
+                <div className="w-2.5 h-2.5 rounded-full bg-zinc-650" />
+                <span className="text-xs font-mono font-bold text-zinc-400 uppercase">
+                  LOCAL FALLBACK (SUPABASE NOT CONFIGURED)
+                </span>
+              </>
+            )}
+
+            {dbSyncStatus === 'table_missing' && (
+              <>
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                <span className="text-xs font-mono font-bold text-red-400 uppercase animate-pulse">
+                  TABLES MISSING IN SUPABASE
+                </span>
+              </>
+            )}
+
+            {dbSyncStatus === 'error' && (
+              <>
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span className="text-xs font-mono font-bold text-amber-400 uppercase">
+                  SUPABASE DISCONNECTED
+                </span>
+              </>
+            )}
+          </div>
+
+          <p className="text-[11px] text-zinc-400 leading-relaxed max-w-xl">
+            {dbSyncStatus === 'synced' && (
+              "Your competitor records, rankings, and challenge settings are synchronized in real-time with Supabase. When players register or take tier tests, they instantly populate your Supabase database!"
+            )}
+            {dbSyncStatus === 'connecting' && (
+              "Querying Supabase database tables to fetch updated ratings..."
+            )}
+            {dbSyncStatus === 'not_configured' && (
+              "Your records are currently stored locally in this browser. To enable persistent real-time database sync across all clients, please set your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY inside AI Studio Secrets!"
+            )}
+            {dbSyncStatus === 'table_missing' && (
+              "The Supabase connection works, but the 'sonictiers_players' table hasn't been created yet. Run the SQL script below in your Supabase SQL editor to enable the database backend instantly."
+            )}
+            {dbSyncStatus === 'error' && (
+              `Error Detail: ${dbErrorMessage || "Unable to reach Supabase. Check credentials."}`
+            )}
+          </p>
+        </div>
+      </div>
+
+      {dbSyncStatus === 'table_missing' && (
+        <div className="mb-6 p-5 rounded-2xl border border-red-500/20 bg-red-950/5 space-y-4 text-[#e2e8f0]">
+          <div className="flex items-center gap-2 text-red-400">
+            <span className="text-sm">⚡</span>
+            <span className="text-xs font-mono font-bold uppercase tracking-wider">
+              Setup SQL Command for Supabase
+            </span>
+          </div>
+          <p className="text-[11px] text-zinc-300 leading-relaxed">
+            Copy and run this command in your <strong>Supabase SQL Editor</strong> to automatically bootstrap your players database:
+          </p>
+          <div className="relative">
+            <pre className="p-4 rounded-xl bg-zinc-950 text-[10px] font-mono text-zinc-300 overflow-x-auto whitespace-pre border border-zinc-900">
+{`create table if not exists sonictiers_players (
+  id text primary key,
+  username text not null,
+  uuid text not null,
+  "xpLevel" integer default 1,
+  "xpPoints" integer default 100,
+  "overallRank" text default 'LT5',
+  "overallPoints" integer default 0,
+  "winRate" numeric default 0,
+  "joinedDate" text,
+  "isBanned" boolean default false,
+  "banDurationDays" integer,
+  "banStartDate" text,
+  "banExpiresAt" text,
+  "isAdmin" boolean default false,
+  "isTester" boolean default false,
+  "customAvatarUrl" text,
+  "customBodyUrl" text,
+  "isUnoriginal" boolean default false,
+  "skinTimestamp" bigint,
+  "matchHistory" jsonb default '[]'::jsonb,
+  "achievements" jsonb default '[]'::jsonb,
+  "stats" jsonb default '{}'::jsonb,
+  "updated_at" timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists sonictiers_settings (
+  id text primary key,
+  "testLengthSeconds" integer default 5,
+  "aimTargetCount" integer default 15,
+  "banWords" jsonb default '["cheat", "toxic", "hax"]'::jsonb,
+  "autoPromotion" boolean default true,
+  "updated_at" timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table sonictiers_players disable row level security;
+alter table sonictiers_settings disable row level security;`}
+            </pre>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`create table if not exists sonictiers_players (
+  id text primary key,
+  username text not null,
+  uuid text not null,
+  "xpLevel" integer default 1,
+  "xpPoints" integer default 100,
+  "overallRank" text default 'LT5',
+  "overallPoints" integer default 0,
+  "winRate" numeric default 0,
+  "joinedDate" text,
+  "isBanned" boolean default false,
+  "banDurationDays" integer,
+  "banStartDate" text,
+  "banExpiresAt" text,
+  "isAdmin" boolean default false,
+  "isTester" boolean default false,
+  "customAvatarUrl" text,
+  "customBodyUrl" text,
+  "isUnoriginal" boolean default false,
+  "skinTimestamp" bigint,
+  "matchHistory" jsonb default '[]'::jsonb,
+  "achievements" jsonb default '[]'::jsonb,
+  "stats" jsonb default '{}'::jsonb,
+  "updated_at" timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists sonictiers_settings (
+  id text primary key,
+  "testLengthSeconds" integer default 5,
+  "aimTargetCount" integer default 15,
+  "banWords" jsonb default '["cheat", "toxic", "hax"]'::jsonb,
+  "autoPromotion" boolean default true,
+  "updated_at" timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table sonictiers_players disable row level security;
+alter table sonictiers_settings disable row level security;`);
+                alert("SQL query successfully copied to clipboard!");
+              }}
+              className="absolute top-2 right-2 px-3 py-1 bg-zinc-900 border border-zinc-800 text-[9px] font-mono uppercase text-[#39FF14] hover:bg-[#39FF14]/10 rounded-lg cursor-pointer transition-colors"
+            >
+              📋 Copy SQL
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- USERS TAB --- */}
       {activeTab === 'users' && (

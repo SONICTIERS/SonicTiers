@@ -230,28 +230,59 @@ export default function LeaderboardsPage({ players, onSelectPlayer }: Leaderboar
   };
 
   const getRankBadgeStyle = (rankLabel: string) => {
-    if (rankLabel === 'HT1') {
-      return {
-        border: 'border-amber-400/80 shadow-[0_0_8px_rgba(251,191,36,0.2)]',
-        pill: 'bg-amber-500/10 border border-amber-500/30 text-amber-400',
-      };
+    switch (rankLabel) {
+      case 'HT1':
+        return {
+          border: 'border-emerald-400/80 shadow-[0_0_8px_rgba(52,211,153,0.35)]',
+          pill: 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold',
+        };
+      case 'LT1':
+        return {
+          border: 'border-emerald-700/80 shadow-[0_0_6px_rgba(4,120,87,0.25)]',
+          pill: 'bg-emerald-700/10 border border-emerald-700/20 text-emerald-700 font-bold',
+        };
+      case 'HT2':
+        return {
+          border: 'border-cyan-400/80 shadow-[0_0_6px_rgba(34,211,238,0.25)]',
+          pill: 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold',
+        };
+      case 'LT2':
+        return {
+          border: 'border-sky-700/80 shadow-[0_0_6px_rgba(3,105,161,0.25)]',
+          pill: 'bg-sky-700/10 border border-sky-700/20 text-sky-700 font-bold',
+        };
+      case 'HT3':
+        return {
+          border: 'border-purple-400/80 shadow-[0_0_6px_rgba(192,132,252,0.25)]',
+          pill: 'bg-purple-500/10 border border-purple-500/25 text-purple-400 font-bold',
+        };
+      case 'LT3':
+        return {
+          border: 'border-purple-700/80 shadow-[0_0_6px_rgba(126,34,206,0.25)]',
+          pill: 'bg-purple-700/10 border border-purple-700/20 text-purple-700 font-bold',
+        };
+      case 'HT4':
+        return {
+          border: 'border-amber-400/80 shadow-[0_0_6px_rgba(251,191,36,0.25)]',
+          pill: 'bg-amber-500/10 border border-amber-500/25 text-amber-400 font-bold',
+        };
+      case 'LT4':
+        return {
+          border: 'border-amber-700/80 shadow-[0_0_6px_rgba(180,83,9,0.25)]',
+          pill: 'bg-amber-700/10 border border-amber-700/20 text-amber-700 font-bold',
+        };
+      case 'HT5':
+        return {
+          border: 'border-red-400/80 shadow-[0_0_6px_rgba(248,113,113,0.25)]',
+          pill: 'bg-red-500/10 border border-red-500/25 text-red-400 font-bold',
+        };
+      case 'LT5':
+      default:
+        return {
+          border: 'border-red-700/80 shadow-[0_0_6px_rgba(185,28,28,0.25)]',
+          pill: 'bg-red-700/10 border border-red-700/20 text-red-700 font-bold',
+        };
     }
-    if (rankLabel.startsWith('HT')) {
-      return {
-        border: 'border-emerald-500/80 shadow-[0_0_6px_rgba(16,185,129,0.15)]',
-        pill: 'bg-[#0f5229]/60 border border-[#22c55e]/25 text-[#4ade80]',
-      };
-    }
-    if (rankLabel === 'LT1') {
-      return {
-        border: 'border-sky-400/80 shadow-[0_0_6px_rgba(56,189,248,0.15)]',
-        pill: 'bg-[#10305a]/60 border border-sky-500/25 text-sky-400',
-      };
-    }
-    return {
-      border: 'border-rose-500/70 shadow-[0_0_6px_rgba(244,63,94,0.1)]',
-      pill: 'bg-[#40121d]/60 border border-rose-500/25 text-rose-300',
-    };
   };
 
   return (
